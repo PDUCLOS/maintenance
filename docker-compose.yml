@@ -1,0 +1,44 @@
+# =============================================================================
+# Industrial Knowledge Copilot — Docker Compose
+# =============================================================================
+# Only ChromaDB runs in Docker. MLX-based LLM and embeddings run natively on
+# the macOS host (see Makefile) because they need Apple's Metal API.
+#
+# Why this split?
+#   - Docker Desktop on macOS runs in a Linux/arm64 VM
+#   - MLX (Apple's ML framework) uses Metal, which is NOT exposed to that VM
+#   - Attempting to run MLX in Docker on Mac would silently fall back to CPU
+#     or fail outright. We refuse that and keep it native.
+#   - ChromaDB has no such constraint — it runs fine in a container.
+#
+# Usage:
+#   make chroma-up      # start ChromaDB
+#   make chroma-down    # stop ChromaDB
+#   make chroma-logs    # tail logs
+#   make chroma-reset   # delete the persisted index
+# =============================================================================
+
+services:
+  chroma:
+    image: chromadb/chroma:0.5.23
+    container_name: ikc-chroma
+    restart: unless-stopped
+    ports:
+      - "8001:8000"  # host:container
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=False
+    healthcheck:
+      # Chroma exposes a /api/v1/heartbeat endpoint from 0.5.x onwards
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  chroma_data:
+    name: ikc-chroma-data
