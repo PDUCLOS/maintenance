@@ -95,7 +95,21 @@
                 <span class="status-value" id="status-chunks">—</span>
             </div>
 
-            <h3 class="mt-6">Try one of these</h3>
+            <h3 class="mt-6">Quick ask (guided)</h3>
+            <p class="dim" style="font-size: 11px; margin: 6px 0 8px;">
+                Pick a template, fill the fields, click <b>Generate</b>.
+                The form builds a clean question for you.
+            </p>
+            <div id="guided-form">
+                <select id="guided-intent" class="control-select" style="width:100%; margin-bottom: 8px;"></select>
+                <div id="guided-fields" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                <button id="guided-generate" class="btn btn-primary" style="width:100%; margin-top: 10px; padding: 8px 12px; font-size: 12px;">
+                    Generate question
+                </button>
+                <div id="guided-preview" style="display: none; margin-top: 10px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; font-size: 12px;"></div>
+            </div>
+
+            <h3 class="mt-6">Free-form examples</h3>
             <div class="example-questions" id="examples">
                 <!-- Populated by JS -->
             </div>
@@ -158,6 +172,201 @@ const send = document.getElementById('send');
 const sourcesEl = document.getElementById('sources');
 const examplesEl = document.getElementById('examples');
 
+// ===========================================================================
+// Guided question form (mirrors src/rag/intents.py — keep in sync)
+// ===========================================================================
+
+const CMAPSS_SUBSETS = ['FD001', 'FD002', 'FD003', 'FD004'];
+const CMAPSS_SENSORS = Array.from({ length: 21 }, (_, i) => `sensor_${String(i + 1).padStart(2, '0')}`);
+
+const INTENTS = [
+    {
+        key: 'cmapss_unit_count', icon: '🔢', category: 'CMAPSS — factual',
+        label: 'Combien de moteurs dans un subset ?',
+        description: "Nombre d'unités dans le training set du subset.",
+        question: 'How many turbofan engines are in the {subset} training set?',
+        fields: [{ name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' }],
+    },
+    {
+        key: 'cmapss_max_cycles', icon: '🔢', category: 'CMAPSS — factual',
+        label: 'Nombre max de cycles (par unité) dans un subset',
+        description: 'Durée de vie max enregistrée pour une unité du subset.',
+        question: 'What is the maximum number of cycles observed for any unit in {subset}?',
+        fields: [{ name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' }],
+    },
+    {
+        key: 'cmapss_sensor_mean', icon: '📊', category: 'CMAPSS — factual',
+        label: "Moyenne d'un capteur (tous cycles)",
+        description: "Moyenne arithmétique d'un capteur sur l'ensemble du subset.",
+        question: 'What is the mean of {sensor} across all cycles in {subset}?',
+        fields: [
+            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
+            { name: 'sensor', label: 'Capteur (sensor_01 → sensor_21)', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_11' },
+        ],
+    },
+    {
+        key: 'cmapss_sensor_trend', icon: '📈', category: 'CMAPSS — reasoning',
+        label: "Tendance d'un capteur (augmente / diminue / stable)",
+        description: "Le capteur monte, descend, ou reste stable avec l'usure ?",
+        question: 'Does {sensor} tend to increase, decrease, or stay stable as the engine degrades in {subset}?',
+        fields: [
+            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
+            { name: 'sensor', label: 'Capteur', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_04' },
+        ],
+    },
+    {
+        key: 'cmapss_sensor_at_cycle', icon: '🎯', category: 'CMAPSS — reasoning',
+        label: "Valeur moyenne d'un capteur à un cycle précis",
+        description: 'Moyenne du capteur parmi toutes les unités à ce cycle exact.',
+        question: 'For {subset}, at cycle {cycle}, what is the mean of {sensor}?',
+        fields: [
+            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
+            { name: 'sensor', label: 'Capteur', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_07' },
+            { name: 'cycle', label: 'Cycle exact (1-400)', kind: 'number', default: 150, min: 1, max: 400 },
+        ],
+    },
+    {
+        key: 'cmapss_mean_rul', icon: '🤖', category: 'CMAPSS — agent tool calling',
+        label: 'Mean RUL (Remaining Useful Life)',
+        description: "RUL moyen du subset (nécessite l'agent avec tool calling).",
+        question: 'What is the mean RUL in {subset}?',
+        fields: [{ name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' }],
+    },
+    {
+        key: 'cmapss_min_max_sensor', icon: '🤖', category: 'CMAPSS — agent tool calling',
+        label: "Min et max d'un capteur",
+        description: "Plage de variation d'un capteur dans le subset.",
+        question: 'What is the minimum and maximum of {sensor} in {subset}?',
+        fields: [
+            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
+            { name: 'sensor', label: 'Capteur', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_11' },
+        ],
+    },
+    {
+        key: 'industrial_ask', icon: '📚', category: 'Industrial catalogue',
+        label: 'Question sur les catalogues Schaeffler / SKF',
+        description: 'Pose une question libre sur les roulements, montage, lubrification, etc.',
+        question: 'What does the documentation say about {topic}?',
+        fields: [
+            { name: 'topic', label: 'Sujet (en anglais de préférence)', kind: 'text',
+              default: 'ball bearing load rating', placeholder: "Ex: 'ball bearing load rating'" },
+        ],
+    },
+    {
+        key: 'out_of_scope', icon: '⚠️', category: 'Out of scope (test)',
+        label: "Test hors-scope (doit dire 'I don't know')",
+        description: 'Vérifie que le copilot refuse poliment les questions non-pertinentes.',
+        question: '{question}',
+        fields: [
+            { name: 'question', label: 'Question complètement hors-scope', kind: 'text',
+              default: 'What is the best restaurant in Lyon?', placeholder: 'Ex: What is the best restaurant in Lyon?' },
+        ],
+    },
+];
+
+function renderIntentSelector() {
+    const sel = document.getElementById('guided-intent');
+    sel.innerHTML = '';
+    let lastCategory = null;
+    INTENTS.forEach(intent => {
+        if (intent.category !== lastCategory) {
+            const grp = document.createElement('optgroup');
+            grp.label = intent.category;
+            sel.appendChild(grp);
+            lastCategory = intent.category;
+        }
+        const opt = document.createElement('option');
+        opt.value = intent.key;
+        opt.textContent = `${intent.icon}  ${intent.label}`;
+        grp.appendChild(opt);
+    });
+    sel.value = INTENTS[0].key;
+    renderIntentFields();
+}
+
+function renderIntentFields() {
+    const key = document.getElementById('guided-intent').value;
+    const intent = INTENTS.find(i => i.key === key);
+    if (!intent) return;
+    document.getElementById('guided-fields').innerHTML = '';
+    document.getElementById('guided-preview').style.display = 'none';
+    intent.fields.forEach(f => {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.flexDirection = 'column';
+        wrap.style.gap = '2px';
+        const lbl = document.createElement('label');
+        lbl.textContent = f.label;
+        lbl.style.fontSize = '11px';
+        lbl.style.color = 'var(--text-tertiary)';
+        wrap.appendChild(lbl);
+        if (f.kind === 'select') {
+            const s = document.createElement('select');
+            s.className = 'control-select';
+            s.style.width = '100%';
+            f.options.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o;
+                opt.textContent = o;
+                s.appendChild(opt);
+            });
+            s.value = f.default;
+            wrap.appendChild(s);
+        } else if (f.kind === 'number') {
+            const n = document.createElement('input');
+            n.type = 'number';
+            n.min = f.min || 1;
+            n.max = f.max || 9999;
+            n.value = f.default;
+            n.className = 'control-select';
+            n.style.width = '100%';
+            wrap.appendChild(n);
+        } else {
+            const t = document.createElement('input');
+            t.type = 'text';
+            t.value = f.default || '';
+            t.placeholder = f.placeholder || '';
+            t.className = 'control-select';
+            t.style.width = '100%';
+            wrap.appendChild(t);
+        }
+        document.getElementById('guided-fields').appendChild(wrap);
+    });
+}
+
+function buildQuestionFromForm() {
+    const key = document.getElementById('guided-intent').value;
+    const intent = INTENTS.find(i => i.key === key);
+    if (!intent) return null;
+    const values = {};
+    const inputs = document.querySelectorAll('#guided-fields select, #guided-fields input');
+    intent.fields.forEach((f, i) => {
+        values[f.name] = inputs[i].value;
+    });
+    return intent.question.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '');
+}
+
+document.getElementById('guided-intent').addEventListener('change', renderIntentFields);
+document.getElementById('guided-generate').addEventListener('click', () => {
+    const q = buildQuestionFromForm();
+    const preview = document.getElementById('guided-preview');
+    if (!q) return;
+    preview.style.display = 'block';
+    preview.innerHTML = `
+        <div style="color: var(--text-tertiary); font-size: 11px; margin-bottom: 4px;">Generated question:</div>
+        <div style="color: var(--text-primary); font-style: italic; margin-bottom: 8px;">"${q}"</div>
+        <button id="guided-send" class="btn btn-secondary" style="width:100%; padding: 6px; font-size: 12px;">📤 Send this question</button>
+    `;
+    document.getElementById('guided-send').addEventListener('click', () => {
+        input.value = q;
+        sendQuery();
+    }, { once: true });
+});
+
+// ===========================================================================
+// Free-form examples
+// ===========================================================================
+
 const EXAMPLES = [
     { cat: 'CMAPSS — factual', q: 'How many turbofan engines are in the FD001 training set?' },
     { cat: 'CMAPSS — reasoning', q: 'Does sensor_04 tend to increase or decrease as the engine degrades in FD001?' },
@@ -166,7 +375,6 @@ const EXAMPLES = [
     { cat: 'Out-of-scope', q: 'What is the phone number of NASA support?' },
 ];
 
-// --- Render examples --------------------------------------------------------
 EXAMPLES.forEach(ex => {
     const btn = document.createElement('button');
     btn.className = 'example-q';
@@ -179,7 +387,10 @@ EXAMPLES.forEach(ex => {
     examplesEl.appendChild(btn);
 });
 
-// --- System status check ----------------------------------------------------
+// ===========================================================================
+// System status check
+// ===========================================================================
+
 async function refreshStatus() {
     const set = (id, value, cls) => {
         const el = document.getElementById(id);
@@ -205,19 +416,18 @@ async function refreshStatus() {
     }
 }
 
-// --- Chat helpers -----------------------------------------------------------
+// ===========================================================================
+// Chat helpers
+// ===========================================================================
+
 function addMessage(role, content, meta) {
-    // Remove empty-state placeholder if present
     const empty = chat.querySelector('.chat-empty');
     if (empty) empty.remove();
-
     const wrap = document.createElement('div');
     wrap.className = 'message ' + role;
-
     const av = document.createElement('div');
     av.className = 'message-avatar';
     av.textContent = role === 'user' ? 'U' : 'IK';
-
     const body = document.createElement('div');
     body.className = 'message-body';
     body.textContent = content;
@@ -227,7 +437,6 @@ function addMessage(role, content, meta) {
         m.textContent = meta;
         body.appendChild(m);
     }
-
     wrap.appendChild(av);
     wrap.appendChild(body);
     chat.appendChild(wrap);
@@ -270,7 +479,10 @@ function renderSources(sources) {
     });
 }
 
-// --- Send query -------------------------------------------------------------
+// ===========================================================================
+// Send query
+// ===========================================================================
+
 async function sendQuery() {
     const q = input.value.trim();
     if (!q) return;
@@ -294,7 +506,6 @@ async function sendQuery() {
         }
         const data = await r.json();
         assistantEl.classList.remove('streaming-cursor');
-        // Render answer (preserve newlines)
         assistantEl.innerHTML = '';
         const text = document.createElement('div');
         text.style.whiteSpace = 'pre-wrap';
@@ -303,7 +514,7 @@ async function sendQuery() {
         const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
         const meta = document.createElement('div');
         meta.className = 'message-meta';
-        meta.textContent = `⏱ ${elapsed}s · ${(data.sources || []).length} sources · API latency: ${data.latency_ms || '?'}ms`;
+        meta.textContent = `⏱ ${elapsed}s · ${(data.sources || []).length} sources · API latency: ${data.latency_ms || '?'}ms · lang=${data.language || '?'}`;
         assistantEl.appendChild(meta);
         renderSources(data.sources || []);
     } catch (e) {
@@ -331,9 +542,13 @@ input.addEventListener('keydown', e => {
     }
 });
 
-// --- Init -------------------------------------------------------------------
+// ===========================================================================
+// Init
+// ===========================================================================
+
+renderIntentSelector();
 refreshStatus();
-setInterval(refreshStatus, 10000);  // refresh every 10s
+setInterval(refreshStatus, 10000);
 input.focus();
 </script>
 

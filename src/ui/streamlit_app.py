@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -26,6 +25,7 @@ import requests
 import streamlit as st
 
 from src.config import settings
+from src.rag.intents import INTENTS, Category, build_question
 
 API_BASE = f"http://localhost:{settings.api_port}"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -33,6 +33,7 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 
 
 # --- API helpers -------------------------------------------------------------
+
 
 def _api_get(path: str, timeout: float = 5.0) -> dict | None:
     try:
@@ -56,6 +57,7 @@ def _api_post(path: str, payload: dict, timeout: float = 60.0) -> dict | None:
 
 # --- PDF / CMAPSS inspection helpers -----------------------------------------
 
+
 def _pdf_metadata(pdf_path: Path) -> dict:
     """Extract PDF metadata via the `pdfinfo` shell tool (poppler-utils)."""
     if not pdf_path.is_file():
@@ -65,8 +67,16 @@ def _pdf_metadata(pdf_path: Path) -> dict:
             ["pdfinfo", str(pdf_path)], stderr=subprocess.DEVNULL, timeout=10
         ).decode("utf-8", errors="ignore")
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-        return {"pages": "?", "title": "(pdfinfo unavailable)", "size_mb": f"{pdf_path.stat().st_size / 1048576:.1f}"}
-    info: dict = {"pages": "?", "title": "(no title)", "size_mb": f"{pdf_path.stat().st_size / 1048576:.1f}"}
+        return {
+            "pages": "?",
+            "title": "(pdfinfo unavailable)",
+            "size_mb": f"{pdf_path.stat().st_size / 1048576:.1f}",
+        }
+    info: dict = {
+        "pages": "?",
+        "title": "(no title)",
+        "size_mb": f"{pdf_path.stat().st_size / 1048576:.1f}",
+    }
     for line in out.splitlines():
         if line.startswith("Pages:"):
             info["pages"] = line.split(":", 1)[1].strip()
@@ -93,19 +103,21 @@ with st.sidebar:
     health = _api_get("/health")
     if health:
         st.write("**System status**")
-        st.json({
-            "status": health["status"],
-            "chroma": health["chroma_reachable"],
-            "mlx_ready": health["mlx_ready"],
-            "chunks_indexed": health["collection_count"],
-            "hardware": health["hardware"],
-        })
+        st.json(
+            {
+                "status": health["status"],
+                "chroma": health["chroma_reachable"],
+                "mlx_ready": health["mlx_ready"],
+                "chunks_indexed": health["collection_count"],
+                "hardware": health["hardware"],
+            }
+        )
     else:
         st.warning("API unreachable on :8000. Start it with `make api`.")
 
     st.divider()
     st.caption(f"Streamlit on :{settings.ui_port} · API on :{settings.api_port}")
-    st.caption(f"MLX requires Apple Silicon (M1/M2/M3/M4/M5)")
+    st.caption("MLX requires Apple Silicon (M1/M2/M3/M4/M5)")
 
 # --- Main tabs ---------------------------------------------------------------
 tab_chat, tab_inventory, tab_ragas, tab_index = st.tabs(
@@ -137,6 +149,81 @@ with tab_chat:
             help="Allows the copilot to run pandas queries on CMAPSS data.",
         )
 
+    # --- Guided question (intent picker) -----------------------------------
+    with st.expander("🎯 Guided question — pick a template", expanded=False):
+        st.caption(
+            "Si tu ne sais pas quoi demander, choisis un template et remplis "
+            "les champs. Le formulaire génère une question propre, bien formée."
+        )
+        # Group intents by category for a clean selectbox
+        intent_labels_by_cat: dict[str, list[str]] = {}
+        intent_by_label: dict[str, object] = {}
+        for intent in INTENTS:
+            label = f"{intent.icon}  {intent.label}  ·  ({intent.category.value})"
+            intent_labels_by_cat.setdefault(intent.category.value, []).append(label)
+            intent_by_label[label] = intent
+
+        # Build a flat selectbox, grouped by category
+        all_labels: list[str] = []
+        for cat in intent_labels_by_cat:
+            all_labels.append(f"── {cat} ──")
+            all_labels.extend(intent_labels_by_cat[cat])
+        all_labels.insert(0, "— (free-form question below) —")
+
+        chosen_label = st.selectbox("Intent", all_labels, index=0)
+        chosen_intent = intent_by_label.get(chosen_label)
+
+        if chosen_intent is not None:
+            st.caption(chosen_intent.description)
+            # Render one widget per field
+            field_values: dict = {}
+            for f in chosen_intent.fields:
+                if f.kind == "select":
+                    options = [v for v, _ in f.options] or [f.default]
+                    labels = [l for _, l in f.options] or options
+                    default_idx = options.index(f.default) if f.default in options else 0
+                    field_values[f.name] = st.selectbox(
+                        f.label, options, index=default_idx,
+                        format_func=lambda v, l=labels, o=options: l[o.index(v)] if v in o else v,
+                        key=f"intent_{chosen_intent.key}_{f.name}",
+                    )
+                elif f.kind == "number":
+                    field_values[f.name] = str(st.number_input(
+                        f.label,
+                        min_value=f.min_value or 1,
+                        max_value=f.max_value or 9999,
+                        value=int(f.default) if f.default else 100,
+                        key=f"intent_{chosen_intent.key}_{f.name}",
+                    ))
+                else:  # text
+                    field_values[f.name] = st.text_input(
+                        f.label,
+                        value=f.default,
+                        placeholder=f.placeholder,
+                        key=f"intent_{chosen_intent.key}_{f.name}",
+                    )
+
+            col_a, col_b = st.columns([1, 3])
+            with col_a:
+                generate = st.button("💡 Generate question", use_container_width=True)
+            if generate:
+                try:
+                    generated_q = build_question(chosen_intent.key, **field_values)
+                    st.session_state.pending_question = generated_q
+                    st.success(f"Generated: _{generated_q}_")
+                except ValueError as e:
+                    st.error(str(e))
+
+        # If a question is pending (either typed or generated), feed it
+        # into the chat input flow on the next rerun.
+        pending = st.session_state.get("pending_question")
+        if pending:
+            st.info(f"Question prête à envoyer : **{pending}**")
+            if st.button("📤 Send this question"):
+                st.session_state.pending_question_from_input = pending
+                st.session_state.pending_question = None
+                st.rerun()
+
     # Chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -149,8 +236,9 @@ with tab_chat:
                             f"> {s['text'][:400]}{'…' if len(s['text']) > 400 else ''}"
                         )
 
-    # Input
-    if prompt := st.chat_input("Ta question…"):
+    # Input (free-form chat). The guided-question form above can also
+    # push a question via st.session_state.pending_question.
+    if prompt := (st.chat_input("Ta question…") or st.session_state.pop("pending_question_from_input", None)):
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         with st.chat_message("user"):
@@ -178,11 +266,13 @@ with tab_chat:
                             f"**`{s['id']}`** · `{s['source']}` · score={s['score']:.3f}\n\n"
                             f"> {s['text'][:400]}{'…' if len(s['text']) > 400 else ''}"
                         )
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": answer,
-                "sources": sources,
-            })
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": answer,
+                    "sources": sources,
+                }
+            )
 
 
 # ============================================================================
@@ -204,18 +294,22 @@ with tab_inventory:
         for f in cmapss_files:
             if f.suffix == ".txt":
                 size_kb = f.stat().st_size / 1024
-                cmapss_data.append({
-                    "File": f.name,
-                    "Type": "Text data",
-                    "Size": f"{size_kb:.0f} KB",
-                })
+                cmapss_data.append(
+                    {
+                        "File": f.name,
+                        "Type": "Text data",
+                        "Size": f"{size_kb:.0f} KB",
+                    }
+                )
             elif f.suffix == ".pdf":
                 meta = _pdf_metadata(f)
-                cmapss_data.append({
-                    "File": f.name,
-                    "Type": f"PDF ({meta['pages']} pages)",
-                    "Size": f"{meta['size_mb']} MB",
-                })
+                cmapss_data.append(
+                    {
+                        "File": f.name,
+                        "Type": f"PDF ({meta['pages']} pages)",
+                        "Size": f"{meta['size_mb']} MB",
+                    }
+                )
         st.dataframe(pd.DataFrame(cmapss_data), use_container_width=True, hide_index=True)
     else:
         st.warning(f"CMAPSS directory missing: {cmapss_dir}. Run `make data`.")
@@ -234,14 +328,23 @@ with tab_inventory:
             for f in pdfs:
                 meta = _pdf_metadata(f)
                 # Brand inference from filename
-                brand = "Schaeffler" if "schaeffler" in f.name.lower() or "fag" in f.name.lower() else "SKF" if "skf" in f.name.lower() else "?"
-                pdf_data.append({
-                    "File": f.name,
-                    "Brand": brand,
-                    "Pages": meta["pages"],
-                    "Size": f"{meta['size_mb']} MB",
-                    "Title (PDF metadata)": meta["title"][:80] + ("…" if len(meta["title"]) > 80 else ""),
-                })
+                brand = (
+                    "Schaeffler"
+                    if "schaeffler" in f.name.lower() or "fag" in f.name.lower()
+                    else "SKF"
+                    if "skf" in f.name.lower()
+                    else "?"
+                )
+                pdf_data.append(
+                    {
+                        "File": f.name,
+                        "Brand": brand,
+                        "Pages": meta["pages"],
+                        "Size": f"{meta['size_mb']} MB",
+                        "Title (PDF metadata)": meta["title"][:80]
+                        + ("…" if len(meta["title"]) > 80 else ""),
+                    }
+                )
             st.dataframe(pd.DataFrame(pdf_data), use_container_width=True, hide_index=True)
             total_mb = sum(f.stat().st_size for f in pdfs) / 1048576
             st.caption(
@@ -305,7 +408,11 @@ with tab_ragas:
                 history = []
                 for snap in snapshots:
                     d = json.loads(snap.read_text(encoding="utf-8"))
-                    row = {"snapshot": snap.name, "timestamp_utc": d.get("timestamp_utc", "?"), "n_samples": d.get("n_samples", "?")}
+                    row = {
+                        "snapshot": snap.name,
+                        "timestamp_utc": d.get("timestamp_utc", "?"),
+                        "n_samples": d.get("n_samples", "?"),
+                    }
                     for m in d.get("metrics", []):
                         row[m["name"]] = round(m["score"], 3)
                     history.append(row)
@@ -334,50 +441,36 @@ with tab_index:
         with col3:
             st.metric("Hardware", health.get("hardware", "?"))
 
-        # Source distribution
+        # Source distribution + sample chunks — via the API's /index/stats,
+        # not a direct chromadb.HttpClient() from this process. A second
+        # client instantiated from Streamlit's own thread reliably
+        # segfaults the interpreter (chromadb's posthog telemetry call is
+        # broken on this version and something about triggering it from a
+        # non-main thread inside Streamlit's script-rerun model corrupts
+        # the process — same family of issue as MLX's thread-bound Metal
+        # stream elsewhere in this codebase). The API process already owns
+        # one healthy chromadb client; we just ask it over HTTP.
         if health.get("collection_count", 0) > 0 and health.get("chroma_reachable"):
             st.divider()
             st.subheader("Source distribution")
-            try:
-                # Direct Chroma call (we're in the same docker network conceptually,
-                # but actually we're on the host, so we use HTTP)
-                import chromadb
-
-                client = chromadb.HttpClient(
-                    host=settings.chroma_host, port=settings.chroma_port
+            stats = _api_get("/index/stats")
+            if stats and stats.get("source_counts"):
+                df_sources = pd.DataFrame(
+                    [{"source": k, "count": v} for k, v in stats["source_counts"].items()]
+                ).sort_values("count", ascending=False)
+                st.bar_chart(df_sources.set_index("source"))
+                st.caption(
+                    f"Distribution over {sum(stats['source_counts'].values())} sampled chunks "
+                    f"(cap at 10k for performance)."
                 )
-                collection = client.get_or_create_collection(settings.chroma_collection)
-                data = collection.get(include=["metadatas"], limit=10000)
-                metas = data.get("metadatas") or []
-                if metas:
-                    source_counts: dict[str, int] = {}
-                    for m in metas:
-                        src = (m or {}).get("source", "unknown")
-                        # Truncate long source names for the chart
-                        short = src.split(":")[0] if ":" in src else src
-                        source_counts[short] = source_counts.get(short, 0) + 1
-                    df_sources = pd.DataFrame(
-                        [{"source": k, "count": v} for k, v in source_counts.items()]
-                    ).sort_values("count", ascending=False)
-                    st.bar_chart(df_sources.set_index("source"))
-                    st.caption(
-                        f"Distribution over {len(metas)} sampled chunks "
-                        f"(cap at 10k for performance)."
-                    )
-                else:
-                    st.info("Collection is empty.")
-            except Exception as e:  # noqa: BLE001
-                st.warning(f"Could not query Chroma: {e}")
+            elif stats:
+                st.info("Collection is empty.")
 
             st.divider()
             st.subheader("Sample chunks (first 5)")
-            try:
-                data = collection.get(limit=5, include=["documents", "metadatas"])
-                for i, doc_id in enumerate(data.get("ids") or []):
-                    with st.expander(f"`{doc_id}`", expanded=False):
-                        text = data["documents"][i] if data.get("documents") else ""
-                        meta = data["metadatas"][i] if data.get("metadatas") else {}
-                        st.caption(f"Source: `{meta.get('source', '?')}` · Metadata: `{meta}`")
+            if stats and stats.get("sample_chunks"):
+                for chunk in stats["sample_chunks"]:
+                    with st.expander(f"`{chunk['id']}`", expanded=False):
+                        st.caption(f"Source: `{chunk['source']}` · Metadata: `{chunk['metadata']}`")
+                        text = chunk["text"]
                         st.text(text[:600] + ("…" if len(text) > 600 else ""))
-            except Exception as e:  # noqa: BLE001
-                st.warning(f"Could not fetch sample chunks: {e}")
