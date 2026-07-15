@@ -1,0 +1,14 @@
+# Sample test document
+
+This is a placeholder text file used to test chunking and retrieval logic
+in CI without requiring a real PDF parser. Replace with a real PDF if you
+need layout-aware parsing tests.
+
+The turbofan engine is composed of:
+- a low-pressure compressor
+- a high-pressure compressor
+- a combustion chamber
+- a high-pressure turbine
+- a low-pressure turbine
+
+The CMAPSS dataset provides run-to-failure sensor readings.

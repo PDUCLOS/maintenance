@@ -1,0 +1,92 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Logs
+logs/
+*.log
+
+# ML / Data
+*.parquet
+*.pkl
+*.joblib
+*.bin
+*.safetensors
+models/
+mlx_models/
+checkpoints/
+
+# Data (raw et processed — volumineux)
+data/raw/cmapss/*.txt
+data/raw/cmapss/*.zip
+data/raw/pdf/*.pdf
+data/processed/chunks.jsonl
+data/processed/eval_dataset.jsonl
+
+# Chroma
+chroma_data/
+chroma_db/
+.chroma/
+
+# Reports (sauf JSON baseline)
+reports/*.json
+!reports/.gitkeep
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.mypy_cache/
+.ruff_cache/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
