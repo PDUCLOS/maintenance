@@ -2,6 +2,7 @@
 
 Source: NASA Ames Prognostics Data Repository
         https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/
+        (mirror: https://data.nasa.gov/dataset/cmapss-jet-engine-simulated-data)
 
 The dataset contains multivariate sensor readings from a fleet of turbofan
 engines, used to predict Remaining Useful Life (RUL). Four sub-datasets
@@ -88,34 +89,78 @@ def assert_cmapss_present(subset: str | None = None) -> None:
         )
 
 
+def _read_cmapss_table(path: Path) -> pd.DataFrame:
+    """Read a CMAPSS .txt file (whitespace-separated, no header) into a DataFrame.
+
+    The file may have trailing whitespace; we use the python engine with
+    a regex separator to be tolerant. Columns are typed as float64 except
+    `unit_nr` and `time_cycles` which are int.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"CMAPSS file not found: {path}")
+
+    df = pd.read_csv(
+        path,
+        sep=r"\s+",
+        header=None,
+        names=COLUMN_NAMES,
+        engine="python",
+        na_values=["NaN", "nan", ""],
+    )
+    # Cast id-like columns to int (they are always whole numbers)
+    df["unit_nr"] = df["unit_nr"].astype(int)
+    df["time_cycles"] = df["time_cycles"].astype(int)
+    return df
+
+
 def load_train(subset: str) -> pd.DataFrame:
     """Load a CMAPSS training file into a typed DataFrame.
 
-    Returns a DataFrame indexed by (unit_nr, time_cycles).
+    Returns a DataFrame with the canonical 26 columns. The DataFrame is
+    NOT indexed — the caller can set_index(["unit_nr", "time_cycles"]) if
+    needed. Keeping the columns makes the tool-calling and DataFrame
+    serialization code simpler.
     """
-    raise NotImplementedError(
-        f"CMAPSS loader: to be implemented in W1 (load {subset} train file, "
-        "apply COLUMN_NAMES, set (unit_nr, time_cycles) index)."
-    )
+    assert subset in SUBSETS, f"Unknown CMAPSS subset: {subset}"
+    path = expected_files(subset)["train"]
+    df = _read_cmapss_table(path)
+    logger.info("Loaded CMAPSS {} train: {} rows × {} cols", subset, len(df), len(df.columns))
+    return df
 
 
 def load_test(subset: str) -> pd.DataFrame:
-    """Load a CMAPSS test file. The RUL for the last cycle of each unit
-    is in the corresponding RUL_{subset}.txt file (loaded separately)."""
-    raise NotImplementedError(
-        f"CMAPSS loader: to be implemented in W1 (load {subset} test file)."
-    )
+    """Load a CMAPSS test file.
+
+    The test set is truncated at some cycle (different per unit) — the
+    ground-truth Remaining Useful Life at the last observed cycle is in
+    the corresponding RUL_{subset}.txt file (load with `load_rul`).
+    """
+    assert subset in SUBSETS, f"Unknown CMAPSS subset: {subset}"
+    path = expected_files(subset)["test"]
+    df = _read_cmapss_table(path)
+    logger.info("Loaded CMAPSS {} test: {} rows × {} cols", subset, len(df), len(df.columns))
+    return df
 
 
 def load_rul(subset: str) -> pd.Series:
     """Load the ground-truth Remaining Useful Life per unit for the test set.
 
-    Returns a Series indexed by unit_nr, values = remaining cycles at last
-    observed time_cycles in the test set.
+    Returns a Series indexed by unit_nr (1..N), values = remaining cycles
+    at the last observed time_cycles in the test set. The file format is
+    one integer per line, one line per unit (in unit order).
     """
-    raise NotImplementedError(
-        f"CMAPSS loader: to be implemented in W1 (load {subset} RUL file)."
-    )
+    assert subset in SUBSETS, f"Unknown CMAPSS subset: {subset}"
+    path = expected_files(subset)["rul"]
+    if not path.is_file():
+        raise FileNotFoundError(f"CMAPSS RUL file not found: {path}")
+
+    # Each line is a single integer; whitespace-separated
+    raw = pd.read_csv(path, sep=r"\s+", header=None, names=["RUL"], engine="python")
+    n_units = len(raw)
+    raw.index = pd.Index(range(1, n_units + 1), name="unit_nr")
+    s = raw["RUL"].astype(int)
+    logger.info("Loaded CMAPSS {} RUL: {} units", subset, len(s))
+    return s
 
 
 def discover_readme() -> Path | None:

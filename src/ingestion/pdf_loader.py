@@ -51,10 +51,27 @@ def load_pdf(pdf_path: Path) -> list[PdfPage]:
     Returns an empty list (not a fake record) if the PDF has no extractable
     text — which is the right behaviour for a scanned-only PDF.
     """
-    raise NotImplementedError(
-        f"PDF loader: to be implemented in W1 (use fitz.open({pdf_path}) and "
-        "iterate pages, extract text, return list[PdfPage])."
-    )
+    import fitz  # PyMuPDF — local import to keep the package import cheap
+
+    if not pdf_path.is_file():
+        raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+    pages: list[PdfPage] = []
+    doc = fitz.open(pdf_path)
+    try:
+        total = len(doc)
+        for i, page in enumerate(doc):
+            text = page.get_text("text")  # plain text extraction
+            if text and text.strip():
+                pages.append(PdfPage(
+                    text=text,
+                    file_name=pdf_path.name,
+                    page_number=i + 1,
+                    total_pages=total,
+                ))
+    finally:
+        doc.close()
+    return pages
 
 
 def load_all_pdfs() -> list[PdfPage]:

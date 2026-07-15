@@ -25,6 +25,7 @@ from src.ingestion.cmapss_loader import (
     SUBSETS,
     assert_cmapss_present,
     discover_readme,
+    load_train,
 )
 from src.ingestion.pdf_loader import load_all_pdfs
 from src.rag.embeddings import Embedder
@@ -45,11 +46,9 @@ def run() -> None:
     # 1a. CMAPSS readme
     readme = discover_readme()
     if readme:
-        corpus.append((readme.read_text(encoding="utf-8"), f"cmapss:readme", {"type": "doc"}))
+        corpus.append((readme.read_text(encoding="utf-8"), "cmapss:readme", {"type": "doc"}))
 
     # 1b. CMAPSS per-subset structured data (textualised)
-    from src.ingestion.cmapss_loader import load_train  # local import to keep startup fast
-
     for subset in SUBSETS:
         df = load_train(subset)
         text = _dataframe_to_text(df, subset)
@@ -91,15 +90,65 @@ def run() -> None:
 
 
 def _dataframe_to_text(df, subset: str) -> str:
-    """Render a CMAPSS DataFrame as a human-readable text block.
+    """Render a CMAPSS DataFrame as a human-readable markdown text block.
 
-    Includes per-sensor statistics and operating conditions summary. This
-    is what the LLM will see when answering questions about the dataset.
+    Includes per-sensor statistics, operating conditions summary, fleet
+    size, and per-sensor trend (first 30% vs last 30% of max cycle).
+    The LLM will see this text when answering questions about the dataset.
+
+    Note: the trend uses the same definition as `src.eval.dataset` so the
+    ground-truth answers in the eval set stay consistent.
     """
-    raise NotImplementedError(
-        f"DataFrame -> text: to be implemented in W1 (per-sensor mean/min/max, "
-        f"operating condition range, fleet size, for subset {subset})."
-    )
+    sensor_cols = [c for c in df.columns if c.startswith("sensor_")]
+    op_cols = [c for c in df.columns if c.startswith("op_setting_")]
+
+    n_units = int(df["unit_nr"].nunique())
+    cycles_per_unit = df.groupby("unit_nr")["time_cycles"].max()
+    max_cycle = int(df["time_cycles"].max())
+
+    lines: list[str] = [
+        f"# CMAPSS Subset {subset}",
+        "",
+        f"- Number of engines: {n_units}",
+        f"- Total cycles (all engines): {len(df):,}",
+        f"- Cycles per engine: min={int(cycles_per_unit.min())}, "
+        f"max={int(cycles_per_unit.max())}, mean={cycles_per_unit.mean():.1f}",
+        "",
+        "## Operating conditions (mean ± std)",
+    ]
+    for col in op_cols:
+        m, s = df[col].mean(), df[col].std()
+        lines.append(f"- {col}: {m:.4f} ± {s:.4f}")
+
+    lines.extend(["", "## Sensor statistics (mean ± std)"])
+    for col in sensor_cols:
+        m, s = df[col].mean(), df[col].std()
+        lines.append(f"- {col}: {m:.2f} ± {s:.2f}")
+
+    # Per-sensor trend: compare mean over the first 30% of max cycle vs
+    # the last 30% of max cycle. Stable, increase, or decrease.
+    lines.extend([
+        "",
+        "## Sensor trends (first 30% vs last 30% of max cycle)",
+    ])
+    cutoff = int(max_cycle * 0.3)
+    first_mask = df["time_cycles"] <= cutoff
+    last_mask = df["time_cycles"] > (max_cycle - cutoff)
+    for col in sensor_cols:
+        first_mean = df.loc[first_mask, col].mean()
+        last_mean = df.loc[last_mask, col].mean()
+        if abs(last_mean - first_mean) < 1e-6:
+            trend = "stable"
+        elif last_mean > first_mean:
+            trend = "increases"
+        else:
+            trend = "decreases"
+        lines.append(
+            f"- {col}: {trend} (first30_mean={first_mean:.2f}, last30_mean={last_mean:.2f})"
+        )
+
+    lines.append("")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
