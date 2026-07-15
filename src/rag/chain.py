@@ -10,6 +10,19 @@ in the RAGResponse — putting retrieval inside the chain would lose
 visibility on which chunks were used.
 
 Streaming is supported end-to-end (token by token) via .stream().
+
+Bilingual handling (FR/EN)
+---------------------------
+The corpus is English (Schaeffler/SKF catalogues, NASA CMAPSS docs).
+The user may ask in French or English. We use **mirror response**:
+the LLM answers in the same language as the question, while keeping
+the source citations in their original language. The system prompt
+(`SYSTEM_PROMPT_MIRROR` in `qa_template.py`) is bilingual on purpose so
+the LLM sees one consistent persona with the mirror rule reinforced.
+
+Language detection: `src.rag.language.detect_language(question)` —
+lightweight heuristic, no extra dep. Used in `query()`/`stream()` to
+pick the right per-call prompt template.
 """
 
 from __future__ import annotations
@@ -20,8 +33,9 @@ from dataclasses import dataclass
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 
-from src.config import settings  # FIX Bug #1: this import was missing
+from src.config import settings
 from src.rag.embeddings import Embedder
+from src.rag.language import detect_language
 from src.rag.llm import MLXChatModel
 from src.rag.prompts.qa_template import get_qa_template
 from src.rag.retriever import HybridRetriever
@@ -33,28 +47,36 @@ from src.utils.timing import timed
 
 @dataclass
 class RAGResponse:
-    """RAG answer with its retrieved sources."""
+    """RAG answer with its retrieved sources and detected language."""
 
     answer: str
     sources: list[RetrievedChunk]
+    language: str  # "fr" or "en" — the language of the answer
 
 
 class RAGChain:
     """The end-to-end RAG chain. Singleton per process (LLM is heavy)."""
 
-    _instance: "RAGChain | None" = None
+    _instance: RAGChain | None = None
 
     def __init__(self, language: str = "fr") -> None:
+        """`language` is the DEFAULT language used only when detection
+        fails (empty/unrecognisable question). For real queries the
+        actual language is auto-detected per call."""
         self.llm = MLXChatModel()
         self.embedder = Embedder()
         self.vectorstore = VectorStore()
         self.retriever = HybridRetriever(self.vectorstore, self.embedder)
-        self.prompt = get_qa_template(language=language)
-        self._chain: Runnable = self._build_chain()
+        self.default_language = language
+        # We don't build a fixed prompt anymore — the chain is rebuilt
+        # per call with the right template. _chain becomes a callable
+        # that takes a (prompt, dict) pair.
+        self._llm = self.llm
+        self._parser = StrOutputParser()
 
     @classmethod
-    def get(cls) -> "RAGChain":
-        """Process-wide singleton (avoids reloading Mistral 7B on every call)."""
+    def get(cls) -> RAGChain:
+        """Process-wide singleton (avoids reloading the LLM on every call)."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -67,7 +89,7 @@ class RAGChain:
     def _format_context(self, chunks: list[RetrievedChunk]) -> str:
         """Render retrieved chunks as a single context string."""
         if not chunks:
-            return "(aucun contexte récupéré — la base de connaissances est vide ou la question est hors-scope)"
+            return "(no context retrieved — the knowledge base is empty or the question is out of scope)"
         lines = []
         for i, c in enumerate(chunks, start=1):
             lines.append(
@@ -75,58 +97,46 @@ class RAGChain:
             )
         return "\n\n---\n\n".join(lines)
 
-    def _build_chain(self) -> Runnable:
-        """Build a simple LCEL chain.
+    def _build_invoke(self, language: str):
+        """Build a per-call LCEL chain for a specific language.
 
-        The chain takes a dict ``{"context": str, "question": str}`` (the
-        prompt variables) and pipes through prompt -> LLM -> string output.
-        Retrieval is done by the caller (in `query`/`stream`), NOT inside
-        the chain, so we can return the retrieved sources alongside the
-        answer in the RAGResponse.
-
-        The RunnablePassthrough is identity here — it just forwards the
-        input dict unchanged. We keep it explicit for readability.
+        Returns a callable that takes ``{"context", "question"}`` and
+        returns the LLM's string answer.
         """
-        chain: Runnable = (
-            RunnablePassthrough()
-            | self.prompt
-            | self.llm
-            | StrOutputParser()
-        )
-        return chain
+        prompt = get_qa_template(language=language)
+        return RunnablePassthrough() | prompt | self._llm | self._parser
 
     @timed
     def query(self, question: str, top_k: int = settings.retriever_top_k) -> RAGResponse:
-        """Run the chain. Returns the answer plus its retrieved sources.
-
-        We do the retrieval explicitly (once) so we can return the sources
-        in the RAGResponse and pass them to the chain's context.
-        """
+        """Run the chain. Returns the answer, the retrieved sources, and
+        the detected language of the answer."""
         if not question or not question.strip():
             raise ValueError("question must not be empty")
+        language = detect_language(question)
         chunks = self.retriever.retrieve(question, top_k=top_k)
         context = self._format_context(chunks)
-        # FIX Bug #2: pass a dict that matches the prompt's variables
-        # (context + question), not a string. The chain doesn't do
-        # retrieval itself — retrieval is owned by `query`/`stream`.
-        answer = self._chain.invoke({"context": context, "question": question})
+        chain = self._build_invoke(language)
+        answer = chain.invoke({"context": context, "question": question})
         logger.info(
-            "RAG query ok (chunks={}, answer_len={})", len(chunks), len(answer)
+            "RAG query ok (lang={}, chunks={}, answer_len={})",
+            language, len(chunks), len(answer),
         )
-        return RAGResponse(answer=answer, sources=chunks)
+        return RAGResponse(answer=answer, sources=chunks, language=language)
 
     def stream(
         self,
         question: str,
         top_k: int = settings.retriever_top_k,
     ) -> Iterator[str]:
-        """Stream the answer token by token (retrieval upfront, as in `query`)."""
+        """Stream the answer token by token. The retrieved sources are
+        not returned in the stream (call `query` for the full response)."""
         if not question or not question.strip():
             raise ValueError("question must not be empty")
+        language = detect_language(question)
         chunks = self.retriever.retrieve(question, top_k=top_k)
         context = self._format_context(chunks)
-        for token in self._chain.stream({"context": context, "question": question}):
-            yield token
+        chain = self._build_invoke(language)
+        yield from chain.stream({"context": context, "question": question})
 
 
 __all__ = ["RAGChain", "RAGResponse"]

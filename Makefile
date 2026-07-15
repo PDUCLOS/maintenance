@@ -44,6 +44,15 @@ PYTHON ?= python3
 VENV := .venv
 VENV_BIN := $(VENV)/bin
 
+# MLX model repos + API/UI host:port — read from src.config (single source
+# of truth, honors .env overrides). Empty if the venv isn't set up yet
+# (fine: these targets all require `make setup` first anyway).
+MLX_MODEL_REPO := $(shell $(VENV_BIN)/python -c "from src.config import settings; print(settings.mlx_model_repo)" 2>/dev/null)
+MLX_EMBED_REPO := $(shell $(VENV_BIN)/python -c "from src.config import settings; print(settings.mlx_embed_repo)" 2>/dev/null)
+API_HOST := $(shell $(VENV_BIN)/python -c "from src.config import settings; print(settings.api_host)" 2>/dev/null)
+API_PORT := $(shell $(VENV_BIN)/python -c "from src.config import settings; print(settings.api_port)" 2>/dev/null)
+UI_PORT := $(shell $(VENV_BIN)/python -c "from src.config import settings; print(settings.ui_port)" 2>/dev/null)
+
 # Load .env if present (export all vars)
 ifneq (,$(wildcard .env))
     include .env
@@ -175,7 +184,10 @@ api: ## Start the FastAPI server on :8000
 
 .PHONY: ui
 ui: ## Start the Streamlit UI on :8501
-	$(VENV_BIN)/streamlit run src/ui/streamlit_app.py --server.port $(UI_PORT) --server.address 0.0.0.0
+	# `streamlit run` puts the script's own dir on sys.path, not the
+	# project root, so `from src.config import settings` fails with
+	# ModuleNotFoundError unless PYTHONPATH is set explicitly here.
+	PYTHONPATH=. $(VENV_BIN)/streamlit run src/ui/streamlit_app.py --server.port $(UI_PORT) --server.address 0.0.0.0
 
 # ----- Evaluation -----------------------------------------------------------
 .PHONY: eval
@@ -187,6 +199,34 @@ eval: ## Run the RAGAS evaluation suite and snapshot the scores
 .PHONY: eval-dataset
 eval-dataset: ## Regenerate the evaluation dataset from CMAPSS
 	$(VENV_BIN)/python -m src.eval.dataset
+
+# ----- Collection management (manual — never auto-reset) --------------------
+# See scripts/manage_collection.py. All destructive operations require
+# explicit human confirmation. The ingest pipeline does NOT reset anything.
+.PHONY: collection-list
+collection-list: ## List all Chroma collections with dim and chunk count
+	$(VENV_BIN)/python scripts/manage_collection.py list
+
+.PHONY: collection-info
+collection-info: ## Show details for one collection (COLLECTION=name)
+	$(VENV_BIN)/python scripts/manage_collection.py info $(COLLECTION)
+
+.PHONY: collection-new
+collection-new: ## Create a new empty collection (NAME=name, never overwrites)
+	$(VENV_BIN)/python scripts/manage_collection.py new $(NAME)
+
+.PHONY: collection-drop
+collection-drop: ## Drop a collection (IRREVERSIBLE — requires confirm via stdin)
+	@echo "⚠️  About to drop $(NAME) (IRREVERSIBLE)."
+	@echo "   Source data (CMAPSS + PDFs) is NOT affected — you can rebuild with 'make ingest'."
+	@read -p "   Type the collection name to confirm: " confirm && \
+	    [ "$$confirm" = "$(NAME)" ] && \
+	    $(VENV_BIN)/python scripts/manage_collection.py drop $(NAME) --yes || \
+	    (echo "   Aborted (input did not match)."; exit 1)
+
+.PHONY: collection-use
+collection-use: ## Set the active collection in .env (NAME=name)
+	$(VENV_BIN)/python scripts/manage_collection.py use $(NAME)
 
 # ----- Quality --------------------------------------------------------------
 .PHONY: lint
