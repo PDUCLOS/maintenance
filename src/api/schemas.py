@@ -25,6 +25,10 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceChunk]
     latency_ms: float
+    language: str = Field(
+        default="en",
+        description="Detected language of the answer (fr or en). Mirror response: same as the question.",
+    )
 
 
 class IngestRequest(BaseModel):
@@ -43,7 +47,12 @@ class IngestResponse(BaseModel):
 class EvalRequest(BaseModel):
     dataset_path: str | None = None  # defaults to settings.eval_dataset_file
     metrics: list[str] = Field(
-        default_factory=lambda: ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+        default_factory=lambda: [
+            "faithfulness",
+            "answer_relevancy",
+            "context_precision",
+            "context_recall",
+        ]
     )
 
 
@@ -65,3 +74,9 @@ class HealthResponse(BaseModel):
     collection_count: int
     mlx_ready: bool
     hardware: str
+
+
+class IndexStatsResponse(BaseModel):
+    collection_count: int
+    source_counts: dict[str, int]
+    sample_chunks: list[SourceChunk]
