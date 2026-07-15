@@ -188,7 +188,9 @@ def build_chunks(pages: Iterable[tuple[str, str, dict[str, str]]]) -> list[Chunk
                 chunk_id=chunk_id,
                 text=sub,
                 source=source,
-                metadata={**metadata, "chunk_index": str(j)},
+                # chunk_id is also kept in metadata so the BM25 retriever
+                # can map its hits back to Chroma entries by the same key.
+                metadata={**metadata, "chunk_id": chunk_id, "chunk_index": str(j)},
             ))
     return chunks
 
