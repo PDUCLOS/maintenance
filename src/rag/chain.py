@@ -1,10 +1,15 @@
 """RAG chain (LangChain LCEL).
 
 Pipeline:
-    question -> retriever -> context formatter -> prompt -> LLM -> answer
+    question -> retrieve -> format context -> prompt -> LLM -> answer
 
-Streaming is supported end-to-end (chunk by chunk) via the LCEL
-.stream() method.
+The chain is a simple "format context then prompt then LLM" LCEL chain.
+We deliberately do the retrieval OUTSIDE the chain (in `query` and
+`stream`) so we can return the retrieved sources alongside the answer
+in the RAGResponse — putting retrieval inside the chain would lose
+visibility on which chunks were used.
+
+Streaming is supported end-to-end (token by token) via .stream().
 """
 
 from __future__ import annotations
@@ -13,13 +18,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import (
-    Runnable,
-    RunnableLambda,
-    RunnableParallel,
-    RunnablePassthrough,
-)
+from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
 
+from src.config import settings  # FIX Bug #1: this import was missing
 from src.rag.embeddings import Embedder
 from src.rag.llm import MLXChatModel
 from src.rag.prompts.qa_template import get_qa_template
@@ -75,20 +76,19 @@ class RAGChain:
         return "\n\n---\n\n".join(lines)
 
     def _build_chain(self) -> Runnable:
-        """Build the LCEL chain: retriever -> context -> prompt -> llm -> str."""
-        retriever_fn = RunnableLambda(
-            lambda question: self.retriever.retrieve(question, top_k=settings.retriever_top_k)
-        )
-        format_fn = RunnableLambda(self._format_context)
+        """Build a simple LCEL chain.
 
-        # The chain takes {"question": str} in, and pipes:
-        #   context = format(retrieve(question))
-        #   prompt_input = {context, question}
-        chain = (
-            RunnableParallel(
-                context=retriever_fn | format_fn,
-                question=RunnablePassthrough(),
-            )
+        The chain takes a dict ``{"context": str, "question": str}`` (the
+        prompt variables) and pipes through prompt -> LLM -> string output.
+        Retrieval is done by the caller (in `query`/`stream`), NOT inside
+        the chain, so we can return the retrieved sources alongside the
+        answer in the RAGResponse.
+
+        The RunnablePassthrough is identity here — it just forwards the
+        input dict unchanged. We keep it explicit for readability.
+        """
+        chain: Runnable = (
+            RunnablePassthrough()
             | self.prompt
             | self.llm
             | StrOutputParser()
@@ -97,22 +97,35 @@ class RAGChain:
 
     @timed
     def query(self, question: str, top_k: int = settings.retriever_top_k) -> RAGResponse:
-        """Run the chain. Returns the answer plus its retrieved sources."""
+        """Run the chain. Returns the answer plus its retrieved sources.
+
+        We do the retrieval explicitly (once) so we can return the sources
+        in the RAGResponse and pass them to the chain's context.
+        """
         if not question or not question.strip():
             raise ValueError("question must not be empty")
         chunks = self.retriever.retrieve(question, top_k=top_k)
         context = self._format_context(chunks)
-        answer = self._chain.invoke({"question": question, "context": context})
+        # FIX Bug #2: pass a dict that matches the prompt's variables
+        # (context + question), not a string. The chain doesn't do
+        # retrieval itself — retrieval is owned by `query`/`stream`.
+        answer = self._chain.invoke({"context": context, "question": question})
         logger.info(
             "RAG query ok (chunks={}, answer_len={})", len(chunks), len(answer)
         )
         return RAGResponse(answer=answer, sources=chunks)
 
-    def stream(self, question: str, top_k: int = settings.retriever_top_k) -> Iterator[str]:
-        """Stream the answer token by token (still uses full retrieval upfront)."""
+    def stream(
+        self,
+        question: str,
+        top_k: int = settings.retriever_top_k,
+    ) -> Iterator[str]:
+        """Stream the answer token by token (retrieval upfront, as in `query`)."""
+        if not question or not question.strip():
+            raise ValueError("question must not be empty")
         chunks = self.retriever.retrieve(question, top_k=top_k)
         context = self._format_context(chunks)
-        for token in self._chain.stream({"question": question, "context": context}):
+        for token in self._chain.stream({"context": context, "question": question}):
             yield token
 
 

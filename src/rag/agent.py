@@ -23,11 +23,21 @@ response.
 Caching: the DataFrames for the 4 subsets are loaded once on first
 agent call (lazy) and kept in memory. Reloading requires re-instantiating
 the agent.
+
+ReAct compatibility (FIX Bug #5)
+--------------------------------
+The ReAct agent format expects tools to take a single string as
+"Action Input". We expose `query_cmapss(query: str)` and parse the
+DSL string internally — that way the LLM produces a single
+``Action Input:`` line that we can validate, instead of trying to
+emit a multi-key dict that the standard ReAct prompt doesn't expect.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import re
+import shlex
+from dataclasses import dataclass
 from threading import Lock
 from typing import Any
 
@@ -40,9 +50,7 @@ from src.utils.logger import logger
 from src.utils.timing import timed
 
 
-# --- The tool ----------------------------------------------------------------
-
-SUPPORTED_OPS = (
+SUPPORTED_OPS: tuple[str, ...] = (
     "mean_sensor",
     "min_sensor",
     "max_sensor",
@@ -53,15 +61,105 @@ SUPPORTED_OPS = (
 )
 
 
+# --- DSL parsing ------------------------------------------------------------
+
+# Sensor must be 1..21
+_SENSOR_RE = re.compile(r"^([1-9]|1\d|2[01])$")
+
+
+def _parse_dsl_query(query: str) -> tuple[str | None, str, dict[str, str]]:
+    """Parse a single-string DSL query into (operation, subset, params).
+
+    Accepted formats (case-insensitive operation, subset is one of FD001..FD004):
+        "unit_count FD001"
+        "mean_sensor subset=FD002 sensor=11"
+        "sensor_at_cycle subset=FD003 sensor=7 cycle=150"
+
+    Returns (None, "FD001", {}) on parse failure so the caller can
+    produce a helpful error message.
+    """
+    if not query or not query.strip():
+        return None, "FD001", {}
+    try:
+        tokens = shlex.split(query)
+    except ValueError:
+        # Unbalanced quotes etc. — fall through
+        return None, "FD001", {}
+    if not tokens:
+        return None, "FD001", {}
+
+    operation = tokens[0].lower()
+    subset = "FD001"
+    params: dict[str, str] = {}
+    for tok in tokens[1:]:
+        if "=" in tok:
+            k, v = tok.split("=", 1)
+            k, v = k.strip(), v.strip()
+            if k == "subset" and v in SUBSETS:
+                # explicit subset=... overrides the default; we don't
+                # also store it in params (the tool reads it via the
+                # `subset` arg, not via params["subset"]).
+                subset = v
+            else:
+                params[k] = v
+        elif tok in SUBSETS:
+            # positional subset wins over the default
+            subset = tok
+        # else: unknown positional token — silently ignore
+    return operation, subset, params
+
+
+# --- Sensor validation ------------------------------------------------------
+
+def _resolve_sensor(sensor: Any, df: pd.DataFrame) -> tuple[str | None, str | None]:
+    """Validate `sensor` and return (col_name, None) or (None, error_msg).
+
+    FIX Bug #4: previously only `mean_sensor` validated the column
+    existence; min/max/sensor_at_cycle could raise KeyError. Now all
+    sensor operations share this helper.
+    """
+    if sensor is None or sensor == "":
+        return None, "Error: 'sensor' parameter is required."
+    sensor_str = str(sensor).strip()
+    if not _SENSOR_RE.match(sensor_str):
+        return None, f"Error: 'sensor' must be an integer in 1..21, got {sensor_str!r}."
+    col = f"sensor_{int(sensor_str):02d}"
+    if col not in df.columns:
+        return None, f"Error: {col!r} is not a valid column in this subset."
+    return col, None
+
+
+def _resolve_cycle(cycle: Any) -> tuple[int | None, str | None]:
+    if cycle is None or cycle == "":
+        return None, "Error: 'cycle' parameter is required."
+    try:
+        c = int(cycle)
+    except (ValueError, TypeError):
+        return None, f"Error: 'cycle' must be an integer, got {cycle!r}."
+    if c < 0:
+        return None, f"Error: 'cycle' must be >= 0, got {c}."
+    return c, None
+
+
+# --- DataFrame loader -------------------------------------------------------
+
+_dataframe_cache: dict[str, pd.DataFrame] = {}
+_cache_lock = Lock()
+
+
 def _get_dataframe(subset: str) -> pd.DataFrame:
     """Load (and cache) the CMAPSS train DataFrame for `subset`."""
     if subset not in SUBSETS:
         raise ValueError(f"Unknown subset: {subset}. Expected one of {SUBSETS}.")
-    return load_train(subset)
+    with _cache_lock:
+        if subset not in _dataframe_cache:
+            _dataframe_cache[subset] = load_train(subset)
+        return _dataframe_cache[subset]
 
+
+# --- Core implementation ----------------------------------------------------
 
 def _format_number(value: float) -> str:
-    """Format a float for natural-language output (avoids 4.0e-7 style noise)."""
     if pd.isna(value):
         return "no data"
     if abs(value) < 0.01 and value != 0:
@@ -69,45 +167,35 @@ def _format_number(value: float) -> str:
     return f"{value:.2f}"
 
 
-def _query_cmapss_impl(operation: str, subset: str = "FD001", **params: Any) -> str:
-    """Core implementation of the query_cmapss tool.
+def _query_cmapss_impl(operation: str, subset: str, **params: Any) -> str:
+    """Core implementation. Public API is the @tool-decorated `query_cmapss`."""
+    try:
+        df = _get_dataframe(subset)
+    except (ValueError, FileNotFoundError) as e:
+        return f"Error: {e}"
 
-    The LLM never sees this function directly — it sees the @tool-wrapped
-    `query_cmapss` below. Keeping the impl separate makes it testable
-    without the LangChain tool decorator.
-    """
-    df = _get_dataframe(subset)
-    sensor = params.get("sensor")
-    cycle = params.get("cycle")
+    if operation in ("mean_sensor", "min_sensor", "max_sensor", "sensor_at_cycle"):
+        col, err = _resolve_sensor(params.get("sensor"), df)
+        if err:
+            return err
 
     if operation == "mean_sensor":
-        if not sensor:
-            return "Error: 'sensor' parameter is required for mean_sensor."
-        col = f"sensor_{int(sensor):02d}"
-        if col not in df.columns:
-            return f"Error: {col} is not a valid column."
         return f"Mean of {col} in {subset}: {_format_number(df[col].mean())}."
 
     if operation == "min_sensor":
-        if not sensor:
-            return "Error: 'sensor' parameter is required for min_sensor."
-        col = f"sensor_{int(sensor):02d}"
         return f"Min of {col} in {subset}: {_format_number(df[col].min())}."
 
     if operation == "max_sensor":
-        if not sensor:
-            return "Error: 'sensor' parameter is required for max_sensor."
-        col = f"sensor_{int(sensor):02d}"
         return f"Max of {col} in {subset}: {_format_number(df[col].max())}."
 
     if operation == "sensor_at_cycle":
-        if not sensor or cycle is None:
-            return "Error: 'sensor' and 'cycle' parameters are required for sensor_at_cycle."
-        col = f"sensor_{int(sensor):02d}"
-        sub = df[df["time_cycles"] == int(cycle)]
+        cycle, err = _resolve_cycle(params.get("cycle"))
+        if err:
+            return err
+        sub = df[df["time_cycles"] == cycle]
         if sub.empty:
-            return f"No data in {subset} at cycle {int(cycle)} (max cycle is {int(df['time_cycles'].max())})."
-        return f"Mean of {col} at cycle {int(cycle)} in {subset}: {_format_number(sub[col].mean())}."
+            return f"No data in {subset} at cycle {cycle} (max cycle is {int(df['time_cycles'].max())})."
+        return f"Mean of {col} at cycle {cycle} in {subset}: {_format_number(sub[col].mean())}."
 
     if operation == "mean_rul":
         try:
@@ -135,42 +223,51 @@ def _query_cmapss_impl(operation: str, subset: str = "FD001", **params: Any) -> 
     )
 
 
+# --- Tool wrapper -----------------------------------------------------------
+
 @tool
-def query_cmapss(operation: str, subset: str = "FD001", **params: Any) -> str:
-    """Query the CMAPSS dataset for a specific aggregate.
+def query_cmapss(query: str) -> str:
+    """Query the CMAPSS dataset. The `query` is a small DSL string.
 
-    Args:
-        operation: one of {"mean_sensor", "min_sensor", "max_sensor",
-            "sensor_at_cycle", "mean_rul", "unit_count", "cycles_stats"}.
-        subset: one of {"FD001", "FD002", "FD003", "FD004"}.
-        **params: operation-specific parameters:
-            - "sensor" (int, 1-21) for sensor_* and sensor_at_cycle
-            - "cycle" (int) for sensor_at_cycle
+    Format (case-insensitive on the operation name):
+        "OPERATION [SUBSET] [key=value ...]"
 
-    Returns:
-        A short natural-language answer with the numerical value, or a
-        clear "unsupported operation" / "Error: ..." message.
+    Examples:
+        query_cmapss("unit_count FD001")
+        query_cmapss("mean_sensor subset=FD002 sensor=11")
+        query_cmapss("sensor_at_cycle subset=FD003 sensor=7 cycle=150")
+        query_cmapss("mean_rul FD002")
+        query_cmapss("cycles_stats")
+
+    SUBSET defaults to FD001 if omitted. `sensor` must be 1..21.
+    `cycle` must be a non-negative integer.
     """
+    operation, subset, params = _parse_dsl_query(query)
+    if operation is None:
+        return (
+            "Error: empty query. Use one of: "
+            + ", ".join(SUPPORTED_OPS)
+        )
+    if operation not in SUPPORTED_OPS:
+        return (
+            f"Unsupported operation: {operation!r}. "
+            f"Supported: {', '.join(SUPPORTED_OPS)}."
+        )
     return _query_cmapss_impl(operation, subset, **params)
 
 
-# --- The agent ---------------------------------------------------------------
+# --- Agent ------------------------------------------------------------------
 
 @dataclass
 class AgentResponse:
     answer: str
-    intermediate_steps: list[tuple[dict, str]]  # (tool_input, tool_output)
+    intermediate_steps: list[tuple[dict, str]]  # (tool_input_dict, tool_output)
 
 
 class CMAPSSCopilotAgent:
-    """LangChain agent combining RAG + CMAPSS Python tool.
-
-    Uses a ReAct-style agent. The tool set is closed (query_cmapss only)
-    — no arbitrary code execution.
-    """
+    """LangChain agent combining RAG + CMAPSS Python tool (closed DSL)."""
 
     def __init__(self) -> None:
-        # Local import to avoid loading the heavy RAG chain at import time.
         from src.rag.chain import RAGChain
 
         self.rag = RAGChain.get()
@@ -183,8 +280,6 @@ class CMAPSSCopilotAgent:
         from langchain.agents import AgentExecutor, create_react_agent
 
         settings.assert_apple_silicon()
-        # Pull the standard ReAct prompt from LangChain Hub. Local fallback
-        # if hub is unreachable (e.g. offline dev).
         try:
             prompt = hub.pull("hwchase17/react")
         except Exception as e:  # noqa: BLE001
@@ -200,7 +295,7 @@ class CMAPSSCopilotAgent:
             agent=agent,
             tools=self.tools,
             verbose=False,
-            max_iterations=4,        # bound the agent's reasoning loop
+            max_iterations=4,
             early_stopping_method="generate",
             handle_parsing_errors=True,
         )
@@ -212,8 +307,6 @@ class CMAPSSCopilotAgent:
         result = self._agent.invoke({"input": question})
         steps: list[tuple[dict, str]] = []
         for s in result.get("intermediate_steps", []):
-            # ReAct AgentAction has .tool_input (str or dict) and the
-            # observation is the string returned by the tool.
             try:
                 tool_input = s[0].tool_input  # type: ignore[attr-defined]
             except AttributeError:
@@ -236,7 +329,7 @@ When responding, use this exact format:
 Question: the input question
 Thought: think about what to do
 Action: the action to take, one of [{tool_names}]
-Action Input: the input to the action
+Action Input: the input to the action (a SINGLE string)
 Observation: the result of the action
 ... (repeat Thought/Action/Action Input/Observation as needed)
 Thought: I now have the answer
@@ -254,4 +347,11 @@ Thought:{agent_scratchpad}"""
     return PromptTemplate.from_template(template)
 
 
-__all__ = ["CMAPSSCopilotAgent", "AgentResponse", "query_cmapss", "SUPPORTED_OPS"]
+__all__ = [
+    "CMAPSSCopilotAgent",
+    "AgentResponse",
+    "query_cmapss",
+    "SUPPORTED_OPS",
+    "_parse_dsl_query",
+    "_query_cmapss_impl",
+]
