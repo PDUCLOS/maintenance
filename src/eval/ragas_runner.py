@@ -36,6 +36,65 @@ class EvalSnapshot:
     snapshot_path: Path
 
 
+_METRIC_REGISTRY: dict[str, str] = {
+    "faithfulness": "ragas.metrics.faithfulness",
+    "answer_relevancy": "ragas.metrics.answer_relevance",  # legacy alias
+    "context_precision": "ragas.metrics.context_precision",
+    "context_recall": "ragas.metrics.context_recall",
+}
+
+
+def _load_metric(name: str):
+    """Import a RAGAS metric by short name. Raises if unknown."""
+    if name not in _METRIC_REGISTRY:
+        raise ValueError(
+            f"Unknown metric: {name!r}. Known: {list(_METRIC_REGISTRY)}"
+        )
+    import importlib
+    mod_path, attr = _METRIC_REGISTRY[name].rsplit(".", 1)
+    mod = importlib.import_module(mod_path)
+    return getattr(mod, attr)
+
+
+def _load_dataset(path: Path) -> list[dict]:
+    items: list[dict] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                items.append(json.loads(line))
+    return items
+
+
+def _build_ragas_samples(items: list[dict], chain: RAGChain) -> list[dict]:
+    """Run the RAG chain on every eval question and collect (q, a, ctxs, gt)."""
+    samples: list[dict] = []
+    for i, item in enumerate(items, start=1):
+        question = item["question"]
+        try:
+            response = chain.query(question)
+            answer = response.answer
+            contexts = [c.text for c in response.sources]
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Sample {} failed: {}", i, e)
+            answer = "ERROR: chain failed"
+            contexts = []
+        samples.append({
+            "question": question,
+            "answer": answer,
+            "contexts": contexts,
+            "ground_truth": item["ground_truth"],
+        })
+        logger.info("Eval sample {}/{} done", i, len(items))
+    return samples
+
+
+def _build_hf_dataset(samples: list[dict]):
+    """Convert samples to a HuggingFace Dataset (what RAGAS expects)."""
+    from datasets import Dataset
+    return Dataset.from_list(samples)
+
+
 @timed
 def run(dataset_path: Path, metrics: list[str]) -> EvalSnapshot:
     """Execute the RAGAS evaluation. Returns the snapshot."""
@@ -49,31 +108,34 @@ def run(dataset_path: Path, metrics: list[str]) -> EvalSnapshot:
     logger.info("Loaded {} eval items from {}", len(items), dataset_path)
 
     chain = RAGChain.get()
-    ragas_samples = []
-    for item in items:
-        response = chain.query(item["question"])
-        ragas_samples.append({
-            "question": item["question"],
-            "answer": response.answer,
-            "contexts": [c.text for c in response.sources],
-            "ground_truth": item["ground_truth"],
-        })
+    samples = _build_ragas_samples(items, chain)
+    hf_ds = _build_hf_dataset(samples)
 
-    # Compute RAGAS metrics
-    raise NotImplementedError(
-        "RAGAS runner: to be implemented in W3. Use ragas.evaluate(...) with "
-        "the chosen metrics, convert to MetricResult list, then snapshot."
-    )
+    # Resolve metric objects
+    metric_objs = [_load_metric(name) for name in metrics]
 
+    # Run RAGAS
+    from ragas import evaluate
 
-def _load_dataset(path: Path) -> list[dict]:
-    items: list[dict] = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                items.append(json.loads(line))
-    return items
+    logger.info("Running RAGAS with metrics: {}", metrics)
+    result = evaluate(hf_ds, metrics=metric_objs)
+
+    # Extract scores (result is a Result object; .scores is a pandas DataFrame)
+    metric_results: list[MetricResult] = []
+    try:
+        scores_df = result.to_pandas()  # one column per metric
+    except Exception as e:  # noqa: BLE001
+        logger.error("Could not convert RAGAS result to DataFrame: {}", e)
+        raise
+    for name in metrics:
+        if name in scores_df.columns:
+            mean = float(scores_df[name].mean())
+            metric_results.append(MetricResult(name=name, score=mean))
+        else:
+            logger.warning("Metric {} not in RAGAS result columns", name)
+
+    snapshot = _snapshot(metric_results, len(samples))
+    return snapshot
 
 
 def _snapshot(metrics: list[MetricResult], n_samples: int) -> EvalSnapshot:
@@ -91,4 +153,5 @@ def _snapshot(metrics: list[MetricResult], n_samples: int) -> EvalSnapshot:
 
 
 if __name__ == "__main__":
-    run(settings.eval_dataset_file, ["faithfulness", "answer_relevancy", "context_precision", "context_recall"])
+    default_metrics = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+    run(settings.eval_dataset_file, default_metrics)
