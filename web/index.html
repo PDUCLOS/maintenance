@@ -79,6 +79,62 @@
     </div>
 </section>
 
+<!-- ============================ WHAT IT ANSWERS ============================ -->
+<section class="section" id="about" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">À propos</div>
+            <h2 class="section-title">À quoi ça sert, à quoi ça répond</h2>
+            <p class="section-subtitle">
+                Un copilote RAG local, conçu pour répondre à des questions de
+                <strong>maintenance industrielle</strong> en croisant données structurées
+                (capteurs de turbofans) et documentation technique (catalogues roulements).
+            </p>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="card" style="border-color: rgba(74, 222, 128, 0.4);">
+                <div class="card-icon" style="background: var(--success-dim); color: var(--success);">✓</div>
+                <div class="card-title">Il répond à</div>
+                <p class="card-text">
+                    <strong>Statistiques sur les données CMAPSS</strong> — combien de moteurs dans un subset,
+                    moyenne d'un capteur, max cycles par unité, etc.<br><br>
+                    <strong>Tendances de capteurs</strong> — un capteur augmente, diminue, ou reste stable
+                    avec l'usure du moteur.<br><br>
+                    <strong>Valeurs précises à un cycle</strong> — « pour FD001 à cycle 150, moyenne de sensor_07 ? ».<br><br>
+                    <strong>Questions sur les roulements</strong> — capacité de charge, lubrification,
+                    montage, types de défauts (depuis les catalogues Schaeffler &amp; SKF).
+                </p>
+            </div>
+
+            <div class="card" style="border-color: rgba(250, 204, 21, 0.4);">
+                <div class="card-icon" style="background: var(--warning-dim); color: var(--warning);">✗</div>
+                <div class="card-title">Il ne répond PAS à</div>
+                <p class="card-text">
+                    <strong>Questions hors-domaine</strong> — météo, cuisine, actualités, code non-Python,
+                    conseils juridiques, etc. Il le dit explicitement plutôt que d'inventer.<br><br>
+                    <strong>Prédictions de prix ou de stock</strong> — les données sont
+                    techniques, pas commerciales.<br><br>
+                    <strong>Code arbitraire</strong> — l'agent a un DSL fermé (7 opérations
+                    whitelistées sur le DataFrame CMAPSS), il n'exécute pas de Python
+                    arbitraire.<br><br>
+                    <strong>Décisions critiques sans supervision</strong> — c'est un outil
+                    d'aide, pas un système autonome de production.
+                </p>
+            </div>
+        </div>
+
+        <div class="callout callout-success mt-6">
+            <strong>Pour qui, pour quoi :</strong> ingénieurs maintenance / data scientists
+            industriels qui veulent prototyper un assistant RAG sur des données
+            techniques réelles, ou formuler des questions reproductibles sur un
+            dataset industriel connu. Pas un chatbot généraliste — un outil
+            spécialisé, vérifiable, avec ses sources citées à chaque réponse.
+        </div>
+    </div>
+</section>
+
+
 <!-- ============================ WHAT IT DOES ============================ -->
 <section class="section" id="what">
     <div class="container">
