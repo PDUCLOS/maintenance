@@ -41,7 +41,7 @@ def _api_get(path: str, timeout: float = 5.0) -> dict | None:
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
-        st.error(f"API call failed: {e}")
+        st.error(f"Appel API échoué : {e}")
         return None
 
 
@@ -51,7 +51,7 @@ def _api_post(path: str, payload: dict, timeout: float = 60.0) -> dict | None:
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
-        st.error(f"API call failed: {e}")
+        st.error(f"Appel API échoué : {e}")
         return None
 
 
@@ -98,30 +98,48 @@ st.set_page_config(
 # --- Sidebar (common) --------------------------------------------------------
 with st.sidebar:
     st.title("🛠️ IKC")
-    st.caption("Local RAG copilot for industrial maintenance.")
+    st.caption("Copilote RAG local pour la maintenance industrielle.")
+
+    # À propos / What this answers — section très visible pour les
+    # visiteurs (recruteurs, users) qui ouvrent le projet.
+    with st.expander("❓ À propos de cet outil", expanded=True):
+        st.markdown(
+            "**Industrial Knowledge Copilot** est un copilote RAG local qui répond à des "
+            "questions sur la **maintenance industrielle** (roulements, capteurs, "
+            "durée de vie) en croisant :\n"
+            "- les **données NASA CMAPSS** (4 datasets, 100+ moteurs, 21 capteurs)\n"
+            "- les **catalogues Schaeffler &amp; SKF** (4 343 pages, en anglais)\n\n"
+            "**À quoi il répond** : questions factuelles (« combien de moteurs dans FD001 ? »), "
+            "statistiques (« moyenne de sensor_11 »), tendances (« le capteur monte ou descend ? »), "
+            "et questions précises sur les catalogues industriels.\n\n"
+            "**À quoi il ne répond pas** : questions hors domaine (météo, cuisine, "
+            "prévisions boursières, etc.) — il le dit explicitement.",
+        )
+
+    st.divider()
+    st.subheader("État du système")
 
     health = _api_get("/health")
     if health:
-        st.write("**System status**")
         st.json(
             {
-                "status": health["status"],
+                "statut": health["status"],
                 "chroma": health["chroma_reachable"],
                 "mlx_ready": health["mlx_ready"],
-                "chunks_indexed": health["collection_count"],
+                "chunks_indexés": health["collection_count"],
                 "hardware": health["hardware"],
             }
         )
     else:
-        st.warning("API unreachable on :8000. Start it with `make api`.")
+        st.warning("API injoignable sur :8000. Lance `make api` dans un terminal.")
 
     st.divider()
-    st.caption(f"Streamlit on :{settings.ui_port} · API on :{settings.api_port}")
-    st.caption("MLX requires Apple Silicon (M1/M2/M3/M4/M5)")
+    st.caption(f"Streamlit sur :{settings.ui_port} · API sur :{settings.api_port}")
+    st.caption("MLX nécessite Apple Silicon (M1/M2/M3/M4/M5).")
 
 # --- Main tabs ---------------------------------------------------------------
 tab_chat, tab_inventory, tab_ragas, tab_index = st.tabs(
-    ["💬 Chat", "📦 Inventory", "📊 RAGAS", "🗂️ Index"]
+    ["💬 Chat", "📦 Inventaire", "📊 RAGAS", "🗂️ Index"]
 )
 
 
@@ -129,10 +147,11 @@ tab_chat, tab_inventory, tab_ragas, tab_index = st.tabs(
 # Tab 1: Chat
 # ============================================================================
 with tab_chat:
-    st.title("Industrial Knowledge Copilot")
+    st.title("Copilote de maintenance industrielle")
     st.caption(
-        "Pose une question sur la maintenance industrielle (NASA CMAPSS) "
-        "ou sur les catalogues techniques (Schaeffler, SKF)."
+        "Pose une question sur la **maintenance industrielle** — données NASA CMAPSS "
+        "(capteurs, durée de vie) ou catalogues techniques (Schaeffler, SKF). "
+        "Tu peux écrire librement ou utiliser le **formulaire guidé** ci-dessous."
     )
 
     if "messages" not in st.session_state:
@@ -141,19 +160,20 @@ with tab_chat:
     # Controls above the chat history
     c1, c2 = st.columns([3, 1])
     with c1:
-        top_k = st.slider("Top-K retrieved chunks", min_value=1, max_value=20, value=5)
+        top_k = st.slider("Nombre de chunks récupérés (top-K)", min_value=1, max_value=20, value=5)
     with c2:
         use_agent = st.toggle(
-            "Use agent (Python tool calling)",
+            "Activer l'agent (tool calling Python)",
             value=False,
-            help="Allows the copilot to run pandas queries on CMAPSS data.",
+            help="Permet au copilote d'exécuter des requêtes pandas sur les données CMAPSS.",
         )
 
     # --- Guided question (intent picker) -----------------------------------
-    with st.expander("🎯 Guided question — pick a template", expanded=False):
+    with st.expander("🎯 Question guidée — choisis un template", expanded=False):
         st.caption(
-            "Si tu ne sais pas quoi demander, choisis un template et remplis "
-            "les champs. Le formulaire génère une question propre, bien formée."
+            "Si tu ne sais pas quoi demander, choisis un template dans la liste et "
+            "remplis les champs. Le formulaire génère une question propre, bien formée, "
+            "optimisée pour la base de connaissances."
         )
         # Group intents by category for a clean selectbox
         intent_labels_by_cat: dict[str, list[str]] = {}
@@ -168,9 +188,9 @@ with tab_chat:
         for cat in intent_labels_by_cat:
             all_labels.append(f"── {cat} ──")
             all_labels.extend(intent_labels_by_cat[cat])
-        all_labels.insert(0, "— (free-form question below) —")
+        all_labels.insert(0, "— (question libre plus bas) —")
 
-        chosen_label = st.selectbox("Intent", all_labels, index=0)
+        chosen_label = st.selectbox("Type de question", all_labels, index=0)
         chosen_intent = intent_by_label.get(chosen_label)
 
         if chosen_intent is not None:
@@ -205,12 +225,12 @@ with tab_chat:
 
             col_a, col_b = st.columns([1, 3])
             with col_a:
-                generate = st.button("💡 Generate question", use_container_width=True)
+                generate = st.button("💡 Générer la question", use_container_width=True)
             if generate:
                 try:
                     generated_q = build_question(chosen_intent.key, **field_values)
                     st.session_state.pending_question = generated_q
-                    st.success(f"Generated: _{generated_q}_")
+                    st.success(f"Question générée : _{generated_q}_")
                 except ValueError as e:
                     st.error(str(e))
 
@@ -219,7 +239,7 @@ with tab_chat:
         pending = st.session_state.get("pending_question")
         if pending:
             st.info(f"Question prête à envoyer : **{pending}**")
-            if st.button("📤 Send this question"):
+            if st.button("📤 Envoyer cette question"):
                 st.session_state.pending_question_from_input = pending
                 st.session_state.pending_question = None
                 st.rerun()
@@ -238,7 +258,7 @@ with tab_chat:
 
     # Input (free-form chat). The guided-question form above can also
     # push a question via st.session_state.pending_question.
-    if prompt := (st.chat_input("Ta question…") or st.session_state.pop("pending_question_from_input", None)):
+    if prompt := (st.chat_input("Pose ta question…") or st.session_state.pop("pending_question_from_input", None)):
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         with st.chat_message("user"):
@@ -279,14 +299,14 @@ with tab_chat:
 # Tab 2: Inventory
 # ============================================================================
 with tab_inventory:
-    st.title("📦 Data inventory")
+    st.title("📦 Inventaire des données")
     st.caption(
         "Provenance et métadonnées de toutes les sources ingérées. "
-        "Voir `data/raw/pdf/INVENTORY.md` pour les détails."
+        "Voir `data/raw/pdf/INVENTORY.md` pour les détails complets."
     )
 
     # CMAPSS section
-    st.subheader("NASA CMAPSS (turbofan engine degradation)")
+    st.subheader("NASA CMAPSS (dégradation de turbofans)")
     cmapss_dir = settings.cmapss_dir
     if cmapss_dir.is_dir():
         cmapss_files = sorted(cmapss_dir.glob("*.txt")) + sorted(cmapss_dir.glob("*.pdf"))
@@ -296,33 +316,33 @@ with tab_inventory:
                 size_kb = f.stat().st_size / 1024
                 cmapss_data.append(
                     {
-                        "File": f.name,
-                        "Type": "Text data",
-                        "Size": f"{size_kb:.0f} KB",
+                        "Fichier": f.name,
+                        "Type": "Données texte",
+                        "Taille": f"{size_kb:.0f} KB",
                     }
                 )
             elif f.suffix == ".pdf":
                 meta = _pdf_metadata(f)
                 cmapss_data.append(
                     {
-                        "File": f.name,
+                        "Fichier": f.name,
                         "Type": f"PDF ({meta['pages']} pages)",
-                        "Size": f"{meta['size_mb']} MB",
+                        "Taille": f"{meta['size_mb']} MB",
                     }
                 )
         st.dataframe(pd.DataFrame(cmapss_data), use_container_width=True, hide_index=True)
     else:
-        st.warning(f"CMAPSS directory missing: {cmapss_dir}. Run `make data`.")
+        st.warning(f"Dossier CMAPSS manquant : {cmapss_dir}. Lance `make data`.")
 
     st.divider()
 
     # PDF section
-    st.subheader("Industrial catalogues (Schaeffler + SKF)")
+    st.subheader("Catalogues industriels (Schaeffler + SKF)")
     pdf_dir = settings.pdf_dir
     if pdf_dir.is_dir():
         pdfs = sorted(pdf_dir.glob("*.pdf"))
         if not pdfs:
-            st.info("No PDFs yet. Add some to `data/raw/pdf/` and re-run `make ingest`.")
+            st.info("Aucun PDF. Ajoutes-en dans `data/raw/pdf/` et relance `make ingest`.")
         else:
             pdf_data = []
             for f in pdfs:
@@ -337,50 +357,50 @@ with tab_inventory:
                 )
                 pdf_data.append(
                     {
-                        "File": f.name,
-                        "Brand": brand,
+                        "Fichier": f.name,
+                        "Marque": brand,
                         "Pages": meta["pages"],
-                        "Size": f"{meta['size_mb']} MB",
-                        "Title (PDF metadata)": meta["title"][:80]
+                        "Taille": f"{meta['size_mb']} MB",
+                        "Titre (métadonnée PDF)": meta["title"][:80]
                         + ("…" if len(meta["title"]) > 80 else ""),
                     }
                 )
             st.dataframe(pd.DataFrame(pdf_data), use_container_width=True, hide_index=True)
             total_mb = sum(f.stat().st_size for f in pdfs) / 1048576
             st.caption(
-                f"**Total: {len(pdfs)} PDFs, {total_mb:.1f} MB.** "
-                f"Source: official manufacturer sites (Schaeffler, SKF). "
-                f"Detailed inventory: [`data/raw/pdf/INVENTORY.md`](data/raw/pdf/INVENTORY.md)."
+                f"**Total : {len(pdfs)} PDFs, {total_mb:.1f} Mo.** "
+                f"Source : sites officiels des fabricants (Schaeffler, SKF). "
+                f"Inventaire détaillé : [`data/raw/pdf/INVENTORY.md`](data/raw/pdf/INVENTORY.md)."
             )
     else:
-        st.warning(f"PDF directory missing: {pdf_dir}.")
+        st.warning(f"Dossier PDF manquant : {pdf_dir}.")
 
 
 # ============================================================================
 # Tab 3: RAGAS
 # ============================================================================
 with tab_ragas:
-    st.title("📊 RAGAS evaluation")
+    st.title("📊 Évaluation RAGAS")
     st.caption(
         "Métriques RAGAS (faithfulness, answer relevancy, context precision, "
-        "context recall). Chaque `make eval` crée un snapshot immutable dans "
-        "`reports/`. Le plus récent est affiché ici, avec l'historique."
+        "context recall). Chaque `make eval` crée un **snapshot immuable** dans "
+        "`reports/`. Le plus récent est affiché ici, avec l'historique complet."
     )
 
     if not REPORTS_DIR.is_dir():
-        st.info("No snapshots yet. Run `make eval` to generate the first one.")
+        st.info("Aucun snapshot. Lance `make eval` pour générer le premier.")
     else:
         snapshots = sorted(REPORTS_DIR.glob("eval_*.json"), reverse=True)
         if not snapshots:
-            st.info("No snapshots yet. Run `make eval` to generate the first one.")
+            st.info("Aucun snapshot. Lance `make eval` pour générer le premier.")
         else:
             # Latest snapshot
             latest = snapshots[0]
-            st.subheader(f"Latest snapshot: `{latest.name}`")
+            st.subheader(f"Dernier snapshot : `{latest.name}`")
             data = json.loads(latest.read_text(encoding="utf-8"))
             ts = data.get("timestamp_utc", "?")
             n = data.get("n_samples", "?")
-            st.caption(f"Timestamp: {ts} · Samples: {n}")
+            st.caption(f"Date : {ts} · Échantillons : {n}")
 
             # Metric cards
             metrics = data.get("metrics", [])
@@ -397,21 +417,21 @@ with tab_ragas:
                             value=f"{score:.3f}",
                         )
                 st.caption(
-                    "Targets: faithfulness > 0.75, answer_relevancy > 0.75, "
+                    "Cibles : faithfulness > 0.75, answer_relevancy > 0.75, "
                     "context_precision > 0.70, context_recall > 0.65"
                 )
 
             # History table
             if len(snapshots) > 1:
                 st.divider()
-                st.subheader("History")
+                st.subheader("Historique")
                 history = []
                 for snap in snapshots:
                     d = json.loads(snap.read_text(encoding="utf-8"))
                     row = {
                         "snapshot": snap.name,
-                        "timestamp_utc": d.get("timestamp_utc", "?"),
-                        "n_samples": d.get("n_samples", "?"),
+                        "date_utc": d.get("timestamp_utc", "?"),
+                        "échantillons": d.get("n_samples", "?"),
                     }
                     for m in d.get("metrics", []):
                         row[m["name"]] = round(m["score"], 3)
@@ -423,21 +443,21 @@ with tab_ragas:
 # Tab 4: Index
 # ============================================================================
 with tab_index:
-    st.title("🗂️ ChromaDB index")
+    st.title("🗂️ Index ChromaDB")
     st.caption(
-        "État de l'index vectoriel. Si la collection est vide, lance "
+        "État de l'index vectoriel en temps réel. Si la collection est vide, lance "
         "`make ingest` après avoir populé `data/raw/`."
     )
 
     health = _api_get("/health")
     if not health:
-        st.warning("API unreachable on :8000. Start it with `make api`.")
+        st.warning("API injoignable sur :8000. Lance `make api`.")
     else:
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total chunks", health.get("collection_count", 0))
+            st.metric("Chunks totaux", health.get("collection_count", 0))
         with col2:
-            st.metric("Chroma reachable", "✅" if health.get("chroma_reachable") else "❌")
+            st.metric("Chroma joignable", "✅" if health.get("chroma_reachable") else "❌")
         with col3:
             st.metric("Hardware", health.get("hardware", "?"))
 
@@ -452,7 +472,7 @@ with tab_index:
         # one healthy chromadb client; we just ask it over HTTP.
         if health.get("collection_count", 0) > 0 and health.get("chroma_reachable"):
             st.divider()
-            st.subheader("Source distribution")
+            st.subheader("Distribution par source")
             stats = _api_get("/index/stats")
             if stats and stats.get("source_counts"):
                 df_sources = pd.DataFrame(
@@ -460,17 +480,17 @@ with tab_index:
                 ).sort_values("count", ascending=False)
                 st.bar_chart(df_sources.set_index("source"))
                 st.caption(
-                    f"Distribution over {sum(stats['source_counts'].values())} sampled chunks "
-                    f"(cap at 10k for performance)."
+                    f"Distribution sur {sum(stats['source_counts'].values())} chunks échantillonnés "
+                    f"(plafond 10k pour la perf)."
                 )
             elif stats:
-                st.info("Collection is empty.")
+                st.info("La collection est vide.")
 
             st.divider()
-            st.subheader("Sample chunks (first 5)")
+            st.subheader("Échantillon de chunks (5 premiers)")
             if stats and stats.get("sample_chunks"):
                 for chunk in stats["sample_chunks"]:
                     with st.expander(f"`{chunk['id']}`", expanded=False):
-                        st.caption(f"Source: `{chunk['source']}` · Metadata: `{chunk['metadata']}`")
+                        st.caption(f"Source : `{chunk['source']}` · Métadonnées : `{chunk['metadata']}`")
                         text = chunk["text"]
                         st.text(text[:600] + ("…" if len(text) > 600 else ""))

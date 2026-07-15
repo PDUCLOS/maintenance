@@ -73,10 +73,26 @@
 
         <!-- ============== LEFT SIDEBAR: system status ============== -->
         <aside class="demo-panel demo-sidebar">
-            <h3>System</h3>
+            <h3>À propos</h3>
+            <p style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 12px;">
+                <strong>Copilote RAG local</strong> pour la <strong>maintenance industrielle</strong>
+                — répond à des questions sur les <strong>données NASA CMAPSS</strong> (capteurs, durée de vie)
+                et les <strong>catalogues Schaeffler / SKF</strong> (4 343 pages).
+            </p>
+            <p style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 12px;">
+                <strong style="color: var(--success);">✓ Il répond à :</strong> questions factuelles
+                (« combien de moteurs dans FD001 ? »), tendances de capteurs, calculs sur les
+                données structurées, questions sur les roulements / lubrification / montage.
+            </p>
+            <p style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 12px;">
+                <strong style="color: var(--warning);">✗ Il ne répond PAS à :</strong> questions
+                hors domaine (météo, cuisine, etc.) — il le dit explicitement.
+            </p>
+
+            <h3>État du système</h3>
             <div class="status-row">
                 <span class="status-label">API</span>
-                <span class="status-value" id="status-api">checking…</span>
+                <span class="status-value" id="status-api">vérification…</span>
             </div>
             <div class="status-row">
                 <span class="status-label">Chroma</span>
@@ -91,32 +107,32 @@
                 <span class="status-value" id="status-hw">—</span>
             </div>
             <div class="status-row">
-                <span class="status-label">Chunks indexed</span>
+                <span class="status-label">Chunks indexés</span>
                 <span class="status-value" id="status-chunks">—</span>
             </div>
 
-            <h3 class="mt-6">Quick ask (guided)</h3>
+            <h3 class="mt-6">Question guidée (template)</h3>
             <p class="dim" style="font-size: 11px; margin: 6px 0 8px;">
-                Pick a template, fill the fields, click <b>Generate</b>.
-                The form builds a clean question for you.
+                Choisis un template, remplis les champs, clique sur <b>Générer</b>.
+                Le formulaire construit une question propre, optimisée pour la base.
             </p>
             <div id="guided-form">
                 <select id="guided-intent" class="control-select" style="width:100%; margin-bottom: 8px;"></select>
                 <div id="guided-fields" style="display: flex; flex-direction: column; gap: 6px;"></div>
                 <button id="guided-generate" class="btn btn-primary" style="width:100%; margin-top: 10px; padding: 8px 12px; font-size: 12px;">
-                    Generate question
+                    Générer la question
                 </button>
                 <div id="guided-preview" style="display: none; margin-top: 10px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; font-size: 12px;"></div>
             </div>
 
-            <h3 class="mt-6">Free-form examples</h3>
+            <h3 class="mt-6">Exemples de questions libres</h3>
             <div class="example-questions" id="examples">
                 <!-- Populated by JS -->
             </div>
 
             <div class="callout callout-success mt-6" style="font-size: 11px; padding: 12px 14px;">
-                The demo talks to the FastAPI backend on <code>:8000</code>.
-                If you see errors, run <code>make api</code> in a terminal.
+                Cette démo parle au backend FastAPI sur <code>:8000</code>.
+                Si tu vois des erreurs, lance <code>make api</code> dans un terminal.
             </div>
         </aside>
 
@@ -126,15 +142,15 @@
                 <div class="chat-empty">
                     <div>
                         <div style="font-size: 48px; margin-bottom: 16px;">💬</div>
-                        <h2>Ask anything about industrial maintenance</h2>
+                        <h2>Pose une question sur la maintenance industrielle</h2>
                         <p class="muted" style="margin-top: 12px;">
-                            The copilot searches through NASA CMAPSS sensor data and
-                            4 343 pages of Schaeffler/SKF catalogues, then answers
-                            with cited sources.
+                            Le copilote cherche dans les données de capteurs NASA CMAPSS
+                            et dans 4 343 pages de catalogues Schaeffler/SKF, puis répond
+                            en citant ses sources.
                         </p>
                         <p class="dim" style="margin-top: 16px; font-size: 12px;">
-                            Tip: click one of the example questions in the left sidebar
-                            to get started.
+                            Astuce : utilise le <b>formulaire guidé</b> à gauche pour poser
+                            une question structurée, ou écris librement dans le champ ci-dessous.
                         </p>
                     </div>
                 </div>
@@ -144,18 +160,18 @@
                     type="text"
                     id="input"
                     class="chat-input"
-                    placeholder="Ask a question…"
+                    placeholder="Pose ta question…"
                     autocomplete="off"
                 >
-                <button id="send" class="chat-send">Send</button>
+                <button id="send" class="chat-send">Envoyer</button>
             </div>
         </main>
 
         <!-- ============== RIGHT SIDEBAR: sources ============== -->
         <aside class="demo-panel demo-sources">
-            <h3>Retrieved sources</h3>
+            <h3>Sources récupérées</h3>
             <div id="sources">
-                <p class="dim" style="font-size: 12px;">Sources will appear here after the first query.</p>
+                <p class="dim" style="font-size: 12px;">Les sources apparaîtront ici après la première question.</p>
             </div>
         </aside>
 
@@ -353,9 +369,9 @@ document.getElementById('guided-generate').addEventListener('click', () => {
     if (!q) return;
     preview.style.display = 'block';
     preview.innerHTML = `
-        <div style="color: var(--text-tertiary); font-size: 11px; margin-bottom: 4px;">Generated question:</div>
+        <div style="color: var(--text-tertiary); font-size: 11px; margin-bottom: 4px;">Question générée :</div>
         <div style="color: var(--text-primary); font-style: italic; margin-bottom: 8px;">"${q}"</div>
-        <button id="guided-send" class="btn btn-secondary" style="width:100%; padding: 6px; font-size: 12px;">📤 Send this question</button>
+        <button id="guided-send" class="btn btn-secondary" style="width:100%; padding: 6px; font-size: 12px;">📤 Envoyer cette question</button>
     `;
     document.getElementById('guided-send').addEventListener('click', () => {
         input.value = q;
@@ -456,7 +472,7 @@ function addAssistantMessage() {
 
 function renderSources(sources) {
     if (!sources || sources.length === 0) {
-        sourcesEl.innerHTML = '<p class="dim" style="font-size: 12px;">No sources retrieved for the last query.</p>';
+        sourcesEl.innerHTML = '<p class="dim" style="font-size: 12px;">Aucune source récupérée pour la dernière question.</p>';
         return;
     }
     sourcesEl.innerHTML = '';
@@ -468,7 +484,7 @@ function renderSources(sources) {
         id.textContent = `[${i + 1}] ${s.id}`;
         const meta = document.createElement('div');
         meta.className = 'source-meta';
-        meta.textContent = `source: ${s.source} · score: ${s.score.toFixed(3)}`;
+        meta.textContent = `source : ${s.source} · score : ${s.score.toFixed(3)}`;
         const txt = document.createElement('div');
         txt.className = 'source-text';
         txt.textContent = s.text || '';
@@ -514,7 +530,7 @@ async function sendQuery() {
         const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
         const meta = document.createElement('div');
         meta.className = 'message-meta';
-        meta.textContent = `⏱ ${elapsed}s · ${(data.sources || []).length} sources · API latency: ${data.latency_ms || '?'}ms · lang=${data.language || '?'}`;
+        meta.textContent = `⏱ ${elapsed}s · ${(data.sources || []).length} sources · latence API : ${data.latency_ms || '?'}ms · langue : ${data.language || '?'}`;
         assistantEl.appendChild(meta);
         renderSources(data.sources || []);
     } catch (e) {
@@ -522,11 +538,11 @@ async function sendQuery() {
         assistantEl.innerHTML = '';
         const err = document.createElement('div');
         err.style.color = 'var(--danger)';
-        err.textContent = '❌ ' + (e.message || 'API error');
+        err.textContent = '❌ ' + (e.message || 'Erreur API');
         assistantEl.appendChild(err);
         const hint = document.createElement('div');
         hint.className = 'message-meta';
-        hint.textContent = 'Make sure `make api` is running on :8000, then `make chroma-up` if Chroma is also down.';
+        hint.textContent = "Vérifie que `make api` tourne sur :8000, puis `make chroma-up` si Chroma est aussi down.";
         assistantEl.appendChild(hint);
     } finally {
         send.disabled = false;
