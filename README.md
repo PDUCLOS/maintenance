@@ -1,7 +1,8 @@
 # Industrial Knowledge Copilot
 
 > Local RAG copilot for industrial maintenance knowledge — NASA CMAPSS turbofan
-> degradation data + technical PDFs, running on Apple Silicon with MLX.
+> degradation data + 7 Schaeffler/SKF technical catalogues, running on Apple
+> Silicon with MLX.
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)](.github/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue)](https://www.python.org/)
@@ -16,20 +17,60 @@ A production-shaped RAG (Retrieval-Augmented Generation) system that answers
 natural-language questions about industrial maintenance. It combines:
 
 - **Document retrieval** over NASA CMAPSS technical documentation and
-  industrial PDF catalogues (chunked + embedded in ChromaDB)
+  7 industrial PDF catalogues from Schaeffler (INA/FAG) and SKF
+  (4,343 pages total, 135 MB — see [`data/raw/pdf/INVENTORY.md`](data/raw/pdf/INVENTORY.md))
+- **Hybrid retrieval** (BM25 + dense embeddings fused with Reciprocal Rank Fusion)
+- **Optional cross-encoder reranker** for top-K precision
 - **Tool calling** on a Python pandas DataFrame for quantitative questions
-  (sensor stats, fleet size, RUL)
+  (sensor stats, fleet size, RUL) — **closed DSL**, no arbitrary code execution
 - **A local LLM** (Mistral 7B Instruct, 4-bit, MLX-quantized) running on
   Apple Silicon via Apple's MLX framework
+- **RAGAS evaluation** (faithfulness, answer relevancy, context precision,
+  context recall) with immutable snapshot history
+- **Streamlit UI** with 4 tabs: Chat / Inventory / RAGAS / Index
 
-100% local. No API key. No data egress. Built to be evaluated with RAGAS,
-shipped with Docker Compose, and demoed in 5 minutes.
+100% local. No API key. No data egress. EU AI Act aware (transparency,
+risk management, data governance documented in [`docs/pipeline.md`](docs/pipeline.md#8-conformité-eu-ai-act-regulation-20241689)).
 
 ## Why it exists
 
 This is a portfolio project designed to fill the **LLM/RAG/GenAI in
 production** gap on my CV. The full pitch is in
 [`docs/pitch_entrevue.md`](docs/pitch_entrevue.md).
+
+## Quickstart
+
+**Prerequisites:** macOS on Apple Silicon (M1/M2/M3/M4/M5), Python 3.12+,
+Docker Desktop. NASA CMAPSS data downloads directly from
+[data.nasa.gov](https://data.nasa.gov/dataset/cmapss-jet-engine-simulated-data)
+— no account needed.
+
+```bash
+git clone https://github.com/PDUCLOS/industrial-knowledge-copilot
+cd industrial-knowledge-copilot
+
+make setup              # create venv, install deps (~2-3 min)
+make pull-models        # download Mistral 7B + bge-small (~5 GB, one time, ~30 min)
+make data               # download NASA CMAPSS (~12 MB compressed, direct from data.nasa.gov)
+make chroma-up          # start ChromaDB in Docker
+
+make ingest             # build the vector index (chunks NASA + 7 PDFs)
+make eval-dataset       # generate 30 deterministic Q&A pairs for RAGAS
+
+make api                # start the API on :8000  (terminal 1)
+make ui                 # start the Streamlit UI on :8501  (terminal 2)
+
+# Optional: run the first RAGAS baseline
+make eval               # writes reports/eval_<UTC>.json (immutable snapshot)
+```
+
+Open <http://localhost:8501> and try:
+
+> *How many turbofan engines are in the FD001 training set?*
+
+The copilot will answer in a few seconds, with the source chunks visible
+in the sidebar. 10 demo questions ready for the pitch are in
+[`scripts/demo_questions.md`](scripts/demo_questions.md).
 
 ## Quickstart
 
@@ -63,14 +104,15 @@ the sidebar.
 
 ```mermaid
 flowchart LR
-    UI[Streamlit UI<br/>:8501] -->|HTTP| API[FastAPI<br/>:8000]
+    UI[Streamlit UI<br/>:8501<br/>4 tabs] -->|HTTP| API[FastAPI<br/>:8000]
     API -->|invoke| RAG[RAG Chain<br/>LangChain LCEL]
     RAG -->|embed| EMB[bge-small<br/>MPS]
     RAG -->|retrieve| HYB[Hybrid Retriever<br/>RRF]
     HYB -->|dense| CHR[(ChromaDB<br/>:8001)]
     HYB -->|BM25| BM25[(In-memory<br/>BM25 index)]
+    HYB -.->|optional| RR[Cross-Encoder<br/>Reranker]
     RAG -->|generate| LLM[Mistral 7B<br/>MLX]
-    RAG -->|tool| TOOL[query_cmapss<br/>pandas]
+    RAG -->|tool| TOOL[query_cmapss<br/>pandas DSL]
     TOOL --> DF[(CMAPSS<br/>DataFrame)]
 ```
 
@@ -126,18 +168,30 @@ make eval             # run RAGAS, snapshot to reports/eval_<UTC>.json
 src/
 ├── config.py                # pydantic-settings, validates Apple Silicon
 ├── ingestion/               # CMAPSS + PDF loaders, chunker, pipeline
-├── rag/                     # embeddings, vectorstore, retriever, MLX LLM, chain, agent
-├── api/                     # FastAPI app + routes
-├── ui/                      # Streamlit chat
+├── rag/
+│   ├── embeddings.py        # bge-small + MPS
+│   ├── vectorstore.py       # ChromaDB HTTP client
+│   ├── retriever.py         # Hybrid (BM25 + dense, RRF)
+│   ├── reranker.py          # Cross-encoder reranker (optional)
+│   ├── llm.py               # MLX-backed Mistral 7B (LangChain-compatible)
+│   ├── chain.py             # LCEL RAG chain
+│   ├── agent.py             # ReAct agent + query_cmapss tool (closed DSL)
+│   ├── types.py             # shared types (RetrievedChunk)
+│   └── prompts/             # system_fr.txt, system_en.txt, qa_template.py
+├── api/                     # FastAPI app + /query /ingest /eval /health
+├── ui/                      # Streamlit 4-tab interface
 ├── eval/                    # RAGAS dataset + runner
 └── utils/                   # loguru, timing
 
 tests/                       # unit + integration (latter skipped on non-Mac)
-docs/                        # architecture, evaluation, pitch
-scripts/                     # setup_mlx, ingest, run_eval, clean
-data/raw/                    # CMAPSS + PDFs (gitignored)
-data/processed/              # chunks.jsonl, eval_dataset.jsonl (gitignored)
-reports/                     # RAGAS snapshots (gitignored JSON)
+docs/                        # architecture, pipeline (IA Act), evaluation, pitch
+docs/diagrams/              # pipeline.drawio (3 pages, editable)
+scripts/                     # 01_setup_mlx, 02_ingest, 03_run_eval, 99_clean, demo_questions
+data/raw/cmapss/            # NASA CMAPSS (gitignored, 14 files, ~45 MB)
+data/raw/pdf/               # 7 Schaeffler + SKF catalogues (gitignored, 135 MB)
+data/raw/pdf/INVENTORY.md   # source URLs, licensing, page counts
+data/processed/             # chunks.jsonl, eval_dataset.jsonl (gitignored)
+reports/                    # RAGAS snapshots (gitignored JSON, immutable)
 ```
 
 ## Development
