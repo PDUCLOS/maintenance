@@ -24,7 +24,7 @@ from langchain_core.documents import Document
 
 from src.config import settings
 from src.rag.embeddings import Embedder
-from src.rag.reranker import Reranker  # noqa: F401  (kept importable from retriever for back-compat)
+from src.rag.reranker import RERANK_OVERFETCH, Reranker  # noqa: F401  (Reranker kept importable from retriever for back-compat)
 from src.rag.types import RetrievedChunk  # re-export for back-compat
 from src.rag.vectorstore import VectorStore
 from src.utils.logger import logger
@@ -98,13 +98,25 @@ class HybridRetriever:
         top_k: int = settings.retriever_top_k,
     ) -> list[RetrievedChunk]:
         """Retrieve top_k chunks via RRF(dense, bm25) or dense-only,
-        optionally reranked by a cross-encoder."""
-        if not settings.hybrid_search:
-            chunks = self._dense_only(query, top_k)
-        else:
-            chunks = self._hybrid(query, top_k)
+        optionally reranked by a cross-encoder.
 
-        # If the reranker is enabled, over-fetch and rerank
+        FIX Bug #3: when the reranker is enabled, we over-fetch
+        (top_k * RERANK_OVERFETCH) candidates, then the reranker trims
+        to top_k. Previously the over-fetch was missing and the reranker
+        was never triggered.
+        """
+        # Decide how many candidates to fetch from the base retrievers
+        if self.reranker is not None:
+            fetch_k = max(top_k, top_k * RERANK_OVERFETCH)
+        else:
+            fetch_k = top_k
+
+        if not settings.hybrid_search:
+            chunks = self._dense_only(query, fetch_k)
+        else:
+            chunks = self._hybrid(query, fetch_k)
+
+        # If the reranker is enabled, rerank and trim to top_k
         if self.reranker is not None and len(chunks) > top_k:
             chunks = self.reranker.rerank(query, chunks, top_n=top_k)
         return chunks

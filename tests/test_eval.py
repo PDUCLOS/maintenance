@@ -86,9 +86,76 @@ def test_query_cmapss_tool_mean_sensor():
 
 
 @pytest.mark.integration
+def test_query_cmapss_tool_min_max_sensor():
+    """min_sensor and max_sensor must work (regression test for Bug #4)."""
+    from src.rag.agent import _query_cmapss_impl
+
+    out_min = _query_cmapss_impl("min_sensor", "FD001", sensor=4)
+    out_max = _query_cmapss_impl("max_sensor", "FD001", sensor=4)
+    # sensor_04 range in FD001 is roughly [1382, 1441]
+    assert "Min" in out_min
+    assert "Max" in out_max
+    assert "sensor_04" in out_min and "sensor_04" in out_max
+
+
+@pytest.mark.integration
+def test_query_cmapss_tool_invalid_sensor():
+    """Invalid sensor must return a clear error, not crash (Bug #4 regression)."""
+    from src.rag.agent import _query_cmapss_impl
+
+    # Out of range
+    out = _query_cmapss_impl("mean_sensor", "FD001", sensor=99)
+    assert "Error" in out and "sensor" in out.lower()
+    # Non-numeric
+    out = _query_cmapss_impl("mean_sensor", "FD001", sensor="abc")
+    assert "Error" in out
+    # Empty
+    out = _query_cmapss_impl("mean_sensor", "FD001", sensor="")
+    assert "Error" in out
+
+
+@pytest.mark.integration
 def test_query_cmapss_tool_unsupported_op():
     """Unknown operations must return a clear 'unsupported' message."""
     from src.rag.agent import _query_cmapss_impl
 
     out = _query_cmapss_impl("hack_the_planet", "FD001")
     assert "Unsupported" in out or "Error" in out
+
+
+# --- DSL parser tests (Bug #5 fix) -----------------------------------------
+
+def test_parse_dsl_query_unit_count():
+    from src.rag.agent import _parse_dsl_query
+
+    op, subset, params = _parse_dsl_query("unit_count FD001")
+    assert op == "unit_count"
+    assert subset == "FD001"
+    assert params == {}
+
+
+def test_parse_dsl_query_with_sensor_and_cycle():
+    from src.rag.agent import _parse_dsl_query
+
+    op, subset, params = _parse_dsl_query("sensor_at_cycle subset=FD003 sensor=7 cycle=150")
+    assert op == "sensor_at_cycle"
+    assert subset == "FD003"
+    assert params == {"subset": "FD003", "sensor": "7", "cycle": "150"}
+
+
+def test_parse_dsl_query_default_subset():
+    from src.rag.agent import _parse_dsl_query
+
+    op, subset, params = _parse_dsl_query("mean_rul")
+    assert op == "mean_rul"
+    assert subset == "FD001"  # default
+    assert params == {}
+
+
+def test_parse_dsl_query_empty():
+    from src.rag.agent import _parse_dsl_query
+
+    op, subset, params = _parse_dsl_query("")
+    assert op is None
+    assert subset == "FD001"
+    assert params == {}

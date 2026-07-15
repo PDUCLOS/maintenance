@@ -72,34 +72,6 @@ The copilot will answer in a few seconds, with the source chunks visible
 in the sidebar. 10 demo questions ready for the pitch are in
 [`scripts/demo_questions.md`](scripts/demo_questions.md).
 
-## Quickstart
-
-**Prerequisites:** macOS on Apple Silicon (M1/M2/M3/M4/M5), Python 3.12+,
-Docker Desktop. NASA CMAPSS data downloads directly from
-[data.nasa.gov](https://data.nasa.gov/dataset/cmapss-jet-engine-simulated-data)
-— no account needed.
-
-```bash
-git clone https://github.com/PDUCLOS/industrial-knowledge-copilot
-cd industrial-knowledge-copilot
-
-make setup              # create venv, install deps
-make pull-models        # download Mistral 7B + bge-small (~5 GB, one time)
-make data               # download NASA CMAPSS (~12 MB compressed, direct from data.nasa.gov)
-
-make chroma-up          # start ChromaDB in Docker
-make ingest             # build the vector index
-make api                # start the API on :8000
-make ui                 # start the Streamlit UI on :8501  (separate terminal)
-```
-
-Open <http://localhost:8501> and ask:
-
-> *How many turbofan engines are in the FD001 training set?*
-
-The copilot will answer in a few seconds, with the source chunks visible in
-the sidebar.
-
 ## Architecture
 
 ```mermaid
