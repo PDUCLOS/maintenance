@@ -2,20 +2,24 @@
 
 ## NASA CMAPSS (Turbofan Engine Degradation Simulation)
 
-- **Source:** NASA Ames Prognostics Data Repository
-- **URL:** https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/
+- **Source:** NASA Ames, mirrored on data.nasa.gov
+- **URL (direct download):** https://data.nasa.gov/docs/legacy/CMAPSSData.zip
+- **Canonical page:** https://data.nasa.gov/dataset/cmapss-jet-engine-simulated-data
 - **License:** Public domain (US Government work)
-- **Access:** Free NASA PCoE account required (registration < 24h)
+- **Access:** Direct download, no account needed (as of 2026).
+  The historical NASA PCoE page (ti.arc.nasa.gov) still exists but its
+  self-service download was retired — data.nasa.gov is the official mirror.
 - **Content:** 4 sub-datasets (FD001..FD004) of multivariate sensor readings
   from turbofan engines under various operating conditions and fault modes.
   Used to develop Remaining Useful Life (RUL) prediction models.
 
 ### Files expected under `data/raw/cmapss/`
 ```
-readme.txt            # technical documentation (used in RAG corpus)
-train_FD001.txt       # training set
-test_FD001.txt        # test set (no RUL labels)
-RUL_FD001.txt         # ground-truth RUL at last cycle, per unit
+readme.txt                          # technical documentation (RAG corpus)
+Damage Propagation Modeling.pdf     # bonus paper, useful for RAG
+train_FD001.txt                     # training set
+test_FD001.txt                      # test set (no RUL labels)
+RUL_FD001.txt                       # ground-truth RUL at last cycle, per unit
 train_FD002.txt
 test_FD002.txt
 RUL_FD002.txt
@@ -25,6 +29,12 @@ RUL_FD003.txt
 train_FD004.txt
 test_FD004.txt
 RUL_FD004.txt
+```
+
+### How to populate
+```bash
+make data
+# Equivalent to: curl -L -o data/raw/cmapss/CMAPSSData.zip <url> && unzip
 ```
 
 ## Technical PDFs (optional, W3-W4)

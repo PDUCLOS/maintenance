@@ -34,7 +34,9 @@ production** gap on my CV. The full pitch is in
 ## Quickstart
 
 **Prerequisites:** macOS on Apple Silicon (M1/M2/M3/M4/M5), Python 3.12+,
-Docker Desktop, a free [NASA PCoE account](https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/).
+Docker Desktop. NASA CMAPSS data downloads directly from
+[data.nasa.gov](https://data.nasa.gov/dataset/cmapss-jet-engine-simulated-data)
+— no account needed.
 
 ```bash
 git clone https://github.com/PDUCLOS/industrial-knowledge-copilot
@@ -42,8 +44,7 @@ cd industrial-knowledge-copilot
 
 make setup              # create venv, install deps
 make pull-models        # download Mistral 7B + bge-small (~5 GB, one time)
-make data               # instructions to download NASA CMAPSS
-# ↑ manually drop the 4 train/test/RUL files into data/raw/cmapss/
+make data               # download NASA CMAPSS (~12 MB compressed, direct from data.nasa.gov)
 
 make chroma-up          # start ChromaDB in Docker
 make ingest             # build the vector index

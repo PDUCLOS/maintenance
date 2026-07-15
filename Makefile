@@ -107,20 +107,32 @@ pull-models: ## Download Mistral 7B (MLX) + bge-small embeddings into HF cache
 	@echo ">> Models downloaded."
 
 # ----- Data -----------------------------------------------------------------
+# NASA CMAPSS is now hosted in open access on data.nasa.gov (no PCoE account
+# required as of 2026). The PCoE page still exists but its direct download
+# was retired; data.nasa.gov is the canonical mirror.
+CMAPSS_URL := https://data.nasa.gov/docs/legacy/CMAPSSData.zip
+CMAPSS_ZIP := data/raw/cmapss/CMAPSSData.zip
+
 .PHONY: data
-data: ## Download NASA CMAPSS dataset (requires free NASA PCoE account)
-	@echo ">> NASA CMAPSS download instructions"
+data: ## Download NASA CMAPSS dataset (direct from data.nasa.gov, no account needed)
+	@echo ">> Downloading NASA CMAPSS from data.nasa.gov..."
+	@echo "   URL:  $(CMAPSS_URL)"
+	@echo "   Size: ~12 MB compressed, ~45 MB uncompressed"
+	@mkdir -p data/raw/cmapss
+	@if [ ! -f $(CMAPSS_ZIP) ]; then \
+	    curl -sL --fail -o $(CMAPSS_ZIP) $(CMAPSS_URL) || \
+	        (echo "   ERROR: download failed. Check your network or grab the file manually:" \
+	         "         $(CMAPSS_URL)"; exit 1); \
+	else \
+	    echo "   Already downloaded, skipping."; \
+	fi
+	@echo ">> Unzipping into data/raw/cmapss/..."
+	@unzip -o -q $(CMAPSS_ZIP) -d data/raw/cmapss/
+	@rm $(CMAPSS_ZIP)
+	@echo ">> Files now in data/raw/cmapss/:"
+	@ls data/raw/cmapss/ | sed 's/^/   - /'
 	@echo ""
-	@echo "   1. Register a free account at: https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/"
-	@echo "   2. Download the 'Turbofan Engine Degradation Simulation' dataset (CMAPSS)"
-	@echo "   3. Unzip into: data/raw/cmapss/"
-	@echo "   4. Expected files: train_FD001.txt, test_FD001.txt, RUL_FD001.txt (× FD002, FD003, FD004)"
-	@echo "   5. Also drop the readme.txt (technical documentation for RAG ingestion)"
-	@echo ""
-	@echo "   If you don't have access yet, request it now — NASA approval is usually < 24h."
-	@test -d data/raw/cmapss && ls data/raw/cmapss/ | head -5
-	@echo ""
-	@echo ">> After downloading, run: make ingest"
+	@echo ">> Dataset ready. Next: 'make chroma-up && make ingest'."
 
 # ----- ChromaDB (Docker) ----------------------------------------------------
 .PHONY: chroma-up
