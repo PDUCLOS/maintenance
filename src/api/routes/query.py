@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from src.api.schemas import QueryRequest, QueryResponse, SourceChunk
 from src.rag.chain import RAGChain
-from src.rag.retriever import RetrievedChunk
+from src.rag.types import RetrievedChunk
 from src.utils.logger import logger
 
 router = APIRouter(prefix="/query", tags=["query"])

@@ -23,7 +23,8 @@ from langchain_core.runnables import (
 from src.rag.embeddings import Embedder
 from src.rag.llm import MLXChatModel
 from src.rag.prompts.qa_template import get_qa_template
-from src.rag.retriever import HybridRetriever, RetrievedChunk
+from src.rag.retriever import HybridRetriever
+from src.rag.types import RetrievedChunk
 from src.rag.vectorstore import VectorStore
 from src.utils.logger import logger
 from src.utils.timing import timed

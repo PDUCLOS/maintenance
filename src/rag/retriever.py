@@ -8,6 +8,10 @@ requiring score calibration.
 
 Reference: Cormack et al. (2009), "Reciprocal Rank Fusion outperforms
 Condorcet and individual Rank Learning Methods", SIGIR.
+
+Optionally, the retriever is paired with a cross-encoder reranker
+(see `src.rag.reranker`). When `settings.reranker_enabled` is true,
+the retriever over-fetches candidates and the reranker trims to top_k.
 """
 
 from __future__ import annotations
@@ -20,24 +24,14 @@ from langchain_core.documents import Document
 
 from src.config import settings
 from src.rag.embeddings import Embedder
+from src.rag.reranker import Reranker  # noqa: F401  (kept importable from retriever for back-compat)
+from src.rag.types import RetrievedChunk  # re-export for back-compat
 from src.rag.vectorstore import VectorStore
 from src.utils.logger import logger
 
 # Standard RRF constant (k0 in the paper). 60 is the commonly-cited value
 # that performs best across most corpora.
 _RRF_K0 = 60
-
-
-@dataclass
-class RetrievedChunk:
-    """A retrieved chunk with its fused score and original source."""
-
-    chunk_id: str
-    text: str
-    source: str
-    metadata: dict[str, str]
-    score: float
-    retrieval_method: str  # "dense", "bm25", or "rrf"
 
 
 @dataclass
@@ -51,8 +45,13 @@ class HybridRetriever:
 
     vectorstore: VectorStore
     embedder: Embedder
+    reranker: Reranker | None = None
     _bm25: BM25Retriever | None = field(default=None, init=False, repr=False)
     _bm25_dirty: bool = field(default=True, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if settings.reranker_enabled:
+            self.reranker = Reranker()
 
     def invalidate_bm25_cache(self) -> None:
         self._bm25_dirty = True
@@ -98,10 +97,17 @@ class HybridRetriever:
         query: str,
         top_k: int = settings.retriever_top_k,
     ) -> list[RetrievedChunk]:
-        """Retrieve top_k chunks via RRF(dense, bm25) or dense-only."""
+        """Retrieve top_k chunks via RRF(dense, bm25) or dense-only,
+        optionally reranked by a cross-encoder."""
         if not settings.hybrid_search:
-            return self._dense_only(query, top_k)
-        return self._hybrid(query, top_k)
+            chunks = self._dense_only(query, top_k)
+        else:
+            chunks = self._hybrid(query, top_k)
+
+        # If the reranker is enabled, over-fetch and rerank
+        if self.reranker is not None and len(chunks) > top_k:
+            chunks = self.reranker.rerank(query, chunks, top_n=top_k)
+        return chunks
 
     def _dense_only(self, query: str, top_k: int) -> list[RetrievedChunk]:
         qv = self.embedder.embed([query])[0]
