@@ -1,5 +1,11 @@
 # Architecture
 
+> For the full pipeline reference (every step in detail, sequence
+> diagrams, IA Act compliance), see
+> [`pipeline.md`](pipeline.md). For editable architecture diagrams, see
+> [`diagrams/pipeline.drawio`](diagrams/pipeline.drawio) (3 pages:
+> overview, data flow, deployment).
+
 ## Overview
 
 The Industrial Knowledge Copilot is a local RAG (Retrieval-Augmented

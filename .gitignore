@@ -55,6 +55,7 @@ checkpoints/
 # Data (raw et processed — volumineux)
 data/raw/cmapss/*.txt
 data/raw/cmapss/*.zip
+data/raw/cmapss/*.pdf
 data/raw/pdf/*.pdf
 data/processed/chunks.jsonl
 data/processed/eval_dataset.jsonl
