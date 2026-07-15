@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo — Industrial Knowledge Copilot</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f9eff'/%3E%3Ctext x='50' y='68' font-size='60' font-family='-apple-system,sans-serif' font-weight='800' fill='white' text-anchor='middle'%3EIK%3C/text%3E%3C/svg%3E">
+    <style>
+        /* Demo page specific */
+        .demo-controls {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            padding: var(--space-2) var(--space-3);
+            border-top: 1px solid var(--border);
+        }
+        .control-label {
+            font-size: var(--text-xs);
+            color: var(--text-tertiary);
+        }
+        .control-select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            padding: 4px 8px;
+            font-size: var(--text-xs);
+            font-family: inherit;
+        }
+        .streaming-cursor::after {
+            content: "▊";
+            animation: blink 1s infinite;
+            color: var(--accent);
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        .latency-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: var(--text-xs);
+            font-family: var(--font-mono);
+            background: var(--bg-tertiary);
+            color: var(--text-tertiary);
+            border-radius: var(--radius-full);
+            border: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================ HEADER ============================ -->
+<header class="site-header">
+    <div class="container">
+        <a href="index.html" class="brand">
+            <div class="brand-mark">IK</div>
+            <span>Industrial Knowledge Copilot</span>
+        </a>
+        <nav class="nav">
+            <a href="index.html">← Project</a>
+            <a href="index.html#architecture">Architecture</a>
+            <a href="index.html#stack">Stack</a>
+            <a href="https://github.com/PDUCLOS/industrial-knowledge-copilot">GitHub</a>
+        </nav>
+    </div>
+</header>
+
+<!-- ============================ DEMO LAYOUT ============================ -->
+<div class="container" style="padding-top: var(--space-4); padding-bottom: var(--space-4);">
+    <div class="demo-layout">
+
+        <!-- ============== LEFT SIDEBAR: system status ============== -->
+        <aside class="demo-panel demo-sidebar">
+            <h3>System</h3>
+            <div class="status-row">
+                <span class="status-label">API</span>
+                <span class="status-value" id="status-api">checking…</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Chroma</span>
+                <span class="status-value" id="status-chroma">—</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">MLX</span>
+                <span class="status-value" id="status-mlx">—</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Hardware</span>
+                <span class="status-value" id="status-hw">—</span>
+            </div>
+            <div class="status-row">
+                <span class="status-label">Chunks indexed</span>
+                <span class="status-value" id="status-chunks">—</span>
+            </div>
+
+            <h3 class="mt-6">Try one of these</h3>
+            <div class="example-questions" id="examples">
+                <!-- Populated by JS -->
+            </div>
+
+            <div class="callout callout-success mt-6" style="font-size: 11px; padding: 12px 14px;">
+                The demo talks to the FastAPI backend on <code>:8000</code>.
+                If you see errors, run <code>make api</code> in a terminal.
+            </div>
+        </aside>
+
+        <!-- ============== MAIN: chat ============== -->
+        <main class="demo-panel chat-main">
+            <div class="chat-history" id="chat">
+                <div class="chat-empty">
+                    <div>
+                        <div style="font-size: 48px; margin-bottom: 16px;">💬</div>
+                        <h2>Ask anything about industrial maintenance</h2>
+                        <p class="muted" style="margin-top: 12px;">
+                            The copilot searches through NASA CMAPSS sensor data and
+                            4 343 pages of Schaeffler/SKF catalogues, then answers
+                            with cited sources.
+                        </p>
+                        <p class="dim" style="margin-top: 16px; font-size: 12px;">
+                            Tip: click one of the example questions in the left sidebar
+                            to get started.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-input-wrap">
+                <input
+                    type="text"
+                    id="input"
+                    class="chat-input"
+                    placeholder="Ask a question…"
+                    autocomplete="off"
+                >
+                <button id="send" class="chat-send">Send</button>
+            </div>
+        </main>
+
+        <!-- ============== RIGHT SIDEBAR: sources ============== -->
+        <aside class="demo-panel demo-sources">
+            <h3>Retrieved sources</h3>
+            <div id="sources">
+                <p class="dim" style="font-size: 12px;">Sources will appear here after the first query.</p>
+            </div>
+        </aside>
+
+    </div>
+</div>
+
+<script>
+'use strict';
+
+const API = 'http://localhost:8000';
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const send = document.getElementById('send');
+const sourcesEl = document.getElementById('sources');
+const examplesEl = document.getElementById('examples');
+
+const EXAMPLES = [
+    { cat: 'CMAPSS — factual', q: 'How many turbofan engines are in the FD001 training set?' },
+    { cat: 'CMAPSS — reasoning', q: 'Does sensor_04 tend to increase or decrease as the engine degrades in FD001?' },
+    { cat: 'CMAPSS — multi-hop', q: 'For FD001, at cycle 150, what is the mean of sensor_07?' },
+    { cat: 'Schaeffler/SKF', q: 'What is the basic dynamic load rating formula used by SKF for rolling bearings?' },
+    { cat: 'Out-of-scope', q: 'What is the phone number of NASA support?' },
+];
+
+// --- Render examples --------------------------------------------------------
+EXAMPLES.forEach(ex => {
+    const btn = document.createElement('button');
+    btn.className = 'example-q';
+    btn.textContent = ex.q;
+    btn.title = ex.cat;
+    btn.onclick = () => {
+        input.value = ex.q;
+        sendQuery();
+    };
+    examplesEl.appendChild(btn);
+});
+
+// --- System status check ----------------------------------------------------
+async function refreshStatus() {
+    const set = (id, value, cls) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = value;
+        el.className = 'status-value ' + (cls || '');
+    };
+    try {
+        const r = await fetch(API + '/health', { signal: AbortSignal.timeout(3000) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const h = await r.json();
+        set('status-api', 'online', 'ok');
+        set('status-chroma', h.chroma_reachable ? 'reachable' : 'down', h.chroma_reachable ? 'ok' : 'error');
+        set('status-mlx', h.mlx_ready ? 'ready' : 'not ready', h.mlx_ready ? 'ok' : 'warn');
+        set('status-hw', h.hardware || '?', '');
+        set('status-chunks', h.collection_count || 0, (h.collection_count > 0) ? 'ok' : 'warn');
+    } catch (e) {
+        set('status-api', 'offline', 'error');
+        set('status-chroma', '—', '');
+        set('status-mlx', '—', '');
+        set('status-hw', '—', '');
+        set('status-chunks', '—', '');
+    }
+}
+
+// --- Chat helpers -----------------------------------------------------------
+function addMessage(role, content, meta) {
+    // Remove empty-state placeholder if present
+    const empty = chat.querySelector('.chat-empty');
+    if (empty) empty.remove();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'message ' + role;
+
+    const av = document.createElement('div');
+    av.className = 'message-avatar';
+    av.textContent = role === 'user' ? 'U' : 'IK';
+
+    const body = document.createElement('div');
+    body.className = 'message-body';
+    body.textContent = content;
+    if (meta) {
+        const m = document.createElement('div');
+        m.className = 'message-meta';
+        m.textContent = meta;
+        body.appendChild(m);
+    }
+
+    wrap.appendChild(av);
+    wrap.appendChild(body);
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+    return body;
+}
+
+function addUserMessage(q) {
+    return addMessage('user', q, null);
+}
+
+function addAssistantMessage() {
+    const body = addMessage('assistant', '', null);
+    body.classList.add('streaming-cursor');
+    return body;
+}
+
+function renderSources(sources) {
+    if (!sources || sources.length === 0) {
+        sourcesEl.innerHTML = '<p class="dim" style="font-size: 12px;">No sources retrieved for the last query.</p>';
+        return;
+    }
+    sourcesEl.innerHTML = '';
+    sources.forEach((s, i) => {
+        const card = document.createElement('div');
+        card.className = 'source-card';
+        const id = document.createElement('div');
+        id.className = 'source-id';
+        id.textContent = `[${i + 1}] ${s.id}`;
+        const meta = document.createElement('div');
+        meta.className = 'source-meta';
+        meta.textContent = `source: ${s.source} · score: ${s.score.toFixed(3)}`;
+        const txt = document.createElement('div');
+        txt.className = 'source-text';
+        txt.textContent = s.text || '';
+        card.appendChild(id);
+        card.appendChild(meta);
+        card.appendChild(txt);
+        sourcesEl.appendChild(card);
+    });
+}
+
+// --- Send query -------------------------------------------------------------
+async function sendQuery() {
+    const q = input.value.trim();
+    if (!q) return;
+    input.value = '';
+    send.disabled = true;
+
+    addUserMessage(q);
+    const assistantEl = addAssistantMessage();
+    const t0 = performance.now();
+
+    try {
+        const r = await fetch(API + '/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: q, top_k: 5, stream: false }),
+            signal: AbortSignal.timeout(60000),
+        });
+        if (!r.ok) {
+            const txt = await r.text();
+            throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 200));
+        }
+        const data = await r.json();
+        assistantEl.classList.remove('streaming-cursor');
+        // Render answer (preserve newlines)
+        assistantEl.innerHTML = '';
+        const text = document.createElement('div');
+        text.style.whiteSpace = 'pre-wrap';
+        text.textContent = data.answer || '(empty answer)';
+        assistantEl.appendChild(text);
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+        const meta = document.createElement('div');
+        meta.className = 'message-meta';
+        meta.textContent = `⏱ ${elapsed}s · ${(data.sources || []).length} sources · API latency: ${data.latency_ms || '?'}ms`;
+        assistantEl.appendChild(meta);
+        renderSources(data.sources || []);
+    } catch (e) {
+        assistantEl.classList.remove('streaming-cursor');
+        assistantEl.innerHTML = '';
+        const err = document.createElement('div');
+        err.style.color = 'var(--danger)';
+        err.textContent = '❌ ' + (e.message || 'API error');
+        assistantEl.appendChild(err);
+        const hint = document.createElement('div');
+        hint.className = 'message-meta';
+        hint.textContent = 'Make sure `make api` is running on :8000, then `make chroma-up` if Chroma is also down.';
+        assistantEl.appendChild(hint);
+    } finally {
+        send.disabled = false;
+        input.focus();
+    }
+}
+
+send.onclick = sendQuery;
+input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendQuery();
+    }
+});
+
+// --- Init -------------------------------------------------------------------
+refreshStatus();
+setInterval(refreshStatus, 10000);  // refresh every 10s
+input.focus();
+</script>
+
+</body>
+</html>

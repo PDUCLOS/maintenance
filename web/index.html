@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Industrial Knowledge Copilot — a local RAG copilot for industrial maintenance, running on Apple Silicon with MLX. Open-source portfolio project by Patrice Duclos.">
+    <title>Industrial Knowledge Copilot — local RAG for industrial maintenance</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f9eff'/%3E%3Ctext x='50' y='68' font-size='60' font-family='-apple-system,sans-serif' font-weight='800' fill='white' text-anchor='middle'%3EIK%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- ============================ HEADER ============================ -->
+<header class="site-header">
+    <div class="container">
+        <a href="index.html" class="brand">
+            <div class="brand-mark">IK</div>
+            <span>Industrial Knowledge Copilot</span>
+        </a>
+        <nav class="nav">
+            <a href="#what">What it does</a>
+            <a href="#architecture">Architecture</a>
+            <a href="#stack">Stack</a>
+            <a href="#results">Results</a>
+            <a href="#ia-act">AI Act</a>
+            <a href="demo.html" class="btn btn-primary" style="padding:8px 16px; font-size:13px;">Try the demo →</a>
+        </nav>
+    </div>
+</header>
+
+<!-- ============================ HERO ============================ -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-badge">
+            <span class="hero-badge-dot"></span>
+            Build fonctionnel · vérifié end-to-end sur Apple Silicon
+        </div>
+
+        <h1>A local RAG copilot<br>for industrial maintenance.</h1>
+
+        <p class="lead">
+            NASA CMAPSS turbofan data + 4 343 pages of Schaeffler &amp; SKF catalogues.
+            Hybrid retrieval (BM25 + dense + cross-encoder reranking), an agent with
+            Python tool calling, and a 7B LLM running natively on Apple Silicon via MLX.
+            100 % local. No API key. No data egress.
+        </p>
+
+        <div class="hero-cta">
+            <a href="demo.html" class="btn btn-primary btn-lg">
+                Try the live demo →
+            </a>
+            <a href="https://github.com/PDUCLOS/industrial-knowledge-copilot" class="btn btn-secondary btn-lg">
+                View on GitHub
+            </a>
+        </div>
+
+        <div class="hero-stats">
+            <div class="stat">
+                <div class="stat-value">4 343</div>
+                <div class="stat-label">Pages indexées</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">135 MB</div>
+                <div class="stat-label">PDF industriels</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">7</div>
+                <div class="stat-label">Catalogues (Schaeffler + SKF)</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">~3-6 s</div>
+                <div class="stat-label">Latence par requête</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">20</div>
+                <div class="stat-label">Bugs trouvés et fixés</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================ WHAT IT DOES ============================ -->
+<section class="section" id="what">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">Capabilities</div>
+            <h2 class="section-title">What it does</h2>
+            <p class="section-subtitle">
+                Three production-shaped pipelines, all running locally on Apple Silicon.
+            </p>
+        </div>
+
+        <div class="grid grid-3">
+            <div class="card">
+                <div class="card-icon">🔍</div>
+                <div class="card-title">Hybrid RAG</div>
+                <p class="card-text">
+                    Reciprocal Rank Fusion of BM25 (lexical) and dense embeddings
+                    (semantic), optionally reranked by a cross-encoder. Catches
+                    exact-match identifiers (FD001, sensor_11) and conceptual
+                    queries in one pass.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="card-icon">🤖</div>
+                <div class="card-title">Agent with Python tool calling</div>
+                <p class="card-text">
+                    A ReAct agent that can call <code>query_cmapss</code> on a pandas
+                    DataFrame. Closed DSL — 7 whitelisted operations, no arbitrary
+                    code execution, clean error messages on bad input. 5/5 tool
+                    invocations on the A/B test harness.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="card-icon">📊</div>
+                <div class="card-title">RAGAS evaluation</div>
+                <p class="card-text">
+                    Standard metrics — faithfulness, answer relevancy, context
+                    precision, context recall — on a deterministic 30-item Q&amp;A
+                    dataset. Immutable snapshots per run give a time series across
+                    tuning iterations.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="card-icon">🛡️</div>
+                <div class="card-title">EU AI Act aware</div>
+                <p class="card-text">
+                    Transparency (Article 50), risk register, data governance,
+                    human oversight — all documented. No PII in the corpus.
+                    Architecture: minimal-risk + transparency obligations only.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="card-icon">🔬</div>
+                <div class="card-title">A/B tested LLM choice</div>
+                <p class="card-text">
+                    Qwen2.5-7B-Instruct (4-bit) over Mistral-7B-Instruct-v0.3 — same
+                    size, same RAM, but 5/5 vs 2/5 tool invocations on the
+                    ReAct harness. Decision driven by measurement, not preference.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="card-icon">🐛</div>
+                <div class="card-title">Real bugs, real fixes</div>
+                <p class="card-text">
+                    20 bugs caught and resolved before first real run — including
+                    withdrawn PyPI versions, tokenizers conflicts, Pydantic v2
+                    ClassVar issues, missing stop sequences, and a CP1252
+                    encoding trap in the NASA readme.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================ ARCHITECTURE ============================ -->
+<section class="section" id="architecture" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">Architecture</div>
+            <h2 class="section-title">Three pipelines, one shared index</h2>
+            <p class="section-subtitle">
+                Ingestion builds the index, query serves users, evaluation measures quality.
+                All share the same ChromaDB collection.
+            </p>
+        </div>
+
+        <h3 class="mt-6" style="font-size: var(--text-lg); margin-bottom: var(--space-3);">Ingestion (one-shot)</h3>
+<div class="flow-diagram">   NASA CMAPSS  (.txt)         <span class="accent">Schaeffler + SKF</span>  (.pdf)
+        │                                  │
+        ▼                                  ▼
+   <span class="accent">cmapss_loader</span>  (pandas)         <span class="accent">pdf_loader</span>  (PyMuPDF)
+        │                                  │
+        └──────────────┬───────────────────┘
+                       ▼
+            <span class="accent2">_dataframe_to_text</span>  (markdown block per subset)
+                       │
+                       ▼
+            <span class="accent2">recursive_split</span>  (500 tok / 50 overlap)
+                       │
+                       ▼
+            <span class="accent2">Embedder.embed</span>  (bge-small + MPS, 384-dim)
+                       │
+                       ▼
+   <span class="success">chunks.jsonl</span>  (audit trail)     <span class="warning">VectorStore.upsert</span>  (HTTP :8001)</div>
+
+        <h3 class="mt-6" style="font-size: var(--text-lg); margin-bottom: var(--space-3);">Query (per request)</h3>
+<div class="flow-diagram">  User
+   │
+   ▼  HTTP POST
+  <span class="accent">Streamlit UI</span>  <span class="dim">:8501</span>
+   │
+   ▼  POST /query  {question, top_k}
+  <span class="accent">FastAPI</span>  <span class="dim">:8000</span>
+   │
+   ▼  RAGChain.query()
+  <span class="accent2">HybridRetriever.retrieve()</span>     <span class="dim">(over-fetch ×3 if rerank enabled)</span>
+   │
+   ├── dense → <span class="success">ChromaDB.cosine</span>
+   └── BM25  → in-memory index
+       │
+       ▼  RRF
+    <span class="accent2">Reranker.rerank()</span>  <span class="dim">(if enabled)</span>
+       │
+       ▼  top_k
+    <span class="accent2">RAGChain._format_context</span>
+       │
+       ▼
+    prompt + context + question
+       │
+       ▼
+    <span class="warning">MLXChatModel</span>  <span class="dim">Qwen2.5-7B-Instruct (4-bit) + Metal</span>
+       │
+       ▼
+    <span class="success">RAGResponse{answer, sources}</span></div>
+
+        <h3 class="mt-6" style="font-size: var(--text-lg); margin-bottom: var(--space-3);">Evaluation (per release)</h3>
+<div class="flow-diagram">  <span class="accent">eval_dataset.jsonl</span>  <span class="dim">(30 Q&amp;A, seed=42)</span>
+   │
+   ▼
+  <span class="accent2">RAGChain.query()</span>  <span class="dim">×30</span>
+   │
+   ▼
+  ragas.evaluate(metrics=[
+    faithfulness,             <span class="dim">answer fidèle au contexte</span>
+    answer_relevancy,          <span class="dim">answer pertinente à la question</span>
+    context_precision,         <span class="dim">les bons chunks ont été retrievés</span>
+    context_recall,            <span class="dim">tous les chunks nécessaires retrieved</span>
+  ])
+   │
+   ▼
+  <span class="success">reports/eval_&lt;UTC&gt;.json</span>  <span class="dim">(immutable, jamais overwritten)</span></div>
+    </div>
+</section>
+
+<!-- ============================ STACK ============================ -->
+<section class="section" id="stack">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">Tech stack</div>
+            <h2 class="section-title">12 layers, every version pinned</h2>
+            <p class="section-subtitle">
+                Standard 2026 stack, with one notable choice: <strong>MLX</strong> over Ollama
+                for ~2× lower latency on Apple Silicon.
+            </p>
+        </div>
+
+        <div style="overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Layer</th>
+                    <th>Choice</th>
+                    <th>Version</th>
+                    <th>Why</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>LLM</td><td>Qwen2.5-7B-Instruct (4-bit, MLX)</td><td class="num">mlx-lm 0.28.4</td><td>Local, A/B test winner (5/5 vs 2/5 for Mistral)</td></tr>
+                <tr><td>Embeddings</td><td>BAAI/bge-small-en-v1.5</td><td class="num">sentence-transformers 3.2.1</td><td>33 M params, fast, high-quality EN</td></tr>
+                <tr><td>Reranker</td><td>cross-encoder/ms-marco-MiniLM-L-6-v2</td><td class="num">sentence-transformers</td><td>+0.10-0.20 on context_precision when enabled</td></tr>
+                <tr><td>Vector store</td><td>ChromaDB (HTTP)</td><td class="num">0.6.3</td><td>Local, HNSW cosine, persistent volume</td></tr>
+                <tr><td>Orchestration</td><td>LangChain LCEL</td><td class="num">0.3.13</td><td>Standard 2026, 80 % of JDs mention it</td></tr>
+                <tr><td>Hybrid retrieval</td><td>BM25 + dense (RRF, k₀=60)</td><td class="num">rank-bm25 0.2.2</td><td>Catches exact-match that dense retrieval misses</td></tr>
+                <tr><td>Evaluation</td><td>RAGAS</td><td class="num">0.2.10</td><td>Standard for RAG metrics, LLM-as-judge</td></tr>
+                <tr><td>API</td><td>FastAPI + Uvicorn</td><td class="num">0.115.5</td><td>Type-safe, async, OpenAPI auto-generated</td></tr>
+                <tr><td>UI</td><td>Streamlit (4 tabs)</td><td class="num">1.41.1</td><td>Chat / Inventory / RAGAS / Index</td></tr>
+                <tr><td>Container</td><td>Docker Compose (ChromaDB only)</td><td class="num">chroma 0.5.23</td><td>MLX runs natively on the host (Metal)</td></tr>
+                <tr><td>Logging</td><td>loguru (JSON structured)</td><td class="num">0.7.3</td><td>Format uniforme, parseable, 10 MB rotation</td></tr>
+                <tr><td>Tests</td><td>pytest + RAGAS eval</td><td class="num">8.3.4</td><td>21/21 green, integration marked separately</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+</section>
+
+<!-- ============================ A/B TEST ============================ -->
+<section class="section" id="ab-test" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">Decision by measurement</div>
+            <h2 class="section-title">A/B test: Qwen2.5 vs Mistral</h2>
+            <p class="section-subtitle">
+                Same harness, same 5 quantitative CMAPSS questions, only the model changed.
+                Before the A/B, two real code bugs (stop sequences, return_intermediate_steps)
+                were fixed — otherwise the test would have masked bugs behind a model change.
+            </p>
+        </div>
+
+        <div style="overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Quant.</th>
+                    <th class="num">Tool correctly invoked</th>
+                    <th class="num">Answer correct</th>
+                    <th>Verdict</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Mistral-7B-Instruct-v0.3</td>
+                    <td class="num">4-bit</td>
+                    <td class="num">2 / 5</td>
+                    <td class="num">1 / 3</td>
+                    <td><span class="badge badge-danger">Rejected</span></td>
+                </tr>
+                <tr>
+                    <td><strong>Qwen2.5-7B-Instruct</strong></td>
+                    <td class="num">4-bit</td>
+                    <td class="num">5 / 5</td>
+                    <td class="num">2-3 / 3</td>
+                    <td><span class="badge badge-success">Selected</span></td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="callout mt-6">
+            <strong>Why Mistral failed:</strong> it wrapped the tool name in markdown
+            backticks (<code>`query_cmapss`</code>), breaking LangChain's exact-match lookup,
+            and could loop until iteration limit. Qwen2.5 produced clean invocations
+            in 5 out of 5 cases, with no overhead (same 7B size, same RAM footprint).
+        </div>
+    </div>
+</section>
+
+<!-- ============================ RESULTS ============================ -->
+<section class="section" id="results">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">Quality measurement</div>
+            <h2 class="section-title">RAGAS targets &amp; status</h2>
+            <p class="section-subtitle">
+                Targets from the PLAN. Actual numbers to be filled in after the first
+                <code>make eval</code> run.
+            </p>
+        </div>
+
+        <div style="overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>What it measures</th>
+                    <th class="num">W3 target</th>
+                    <th class="num">W4 target</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Faithfulness</td>
+                    <td>Answer is faithful to retrieved context (no hallucination)</td>
+                    <td class="num">&gt; 0.65</td>
+                    <td class="num">&gt; 0.75</td>
+                    <td><span class="badge badge-warning">Pending first run</span></td>
+                </tr>
+                <tr>
+                    <td>Answer relevancy</td>
+                    <td>Answer is relevant to the question</td>
+                    <td class="num">&gt; 0.70</td>
+                    <td class="num">&gt; 0.75</td>
+                    <td><span class="badge badge-warning">Pending first run</span></td>
+                </tr>
+                <tr>
+                    <td>Context precision</td>
+                    <td>Retrieved chunks are the right ones</td>
+                    <td class="num">&gt; 0.60</td>
+                    <td class="num">&gt; 0.70</td>
+                    <td><span class="badge badge-warning">Pending first run</span></td>
+                </tr>
+                <tr>
+                    <td>Context recall</td>
+                    <td>All needed chunks were retrieved</td>
+                    <td class="num">&gt; 0.55</td>
+                    <td class="num">&gt; 0.65</td>
+                    <td><span class="badge badge-warning">Pending first run</span></td>
+                </tr>
+                <tr>
+                    <td>Latency (M5 Pro GPU)</td>
+                    <td>End-to-end query time</td>
+                    <td class="num">&lt; 10 s</td>
+                    <td class="num">&lt; 5 s</td>
+                    <td><span class="badge badge-success">3-6 s observed</span></td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="callout callout-warning mt-6">
+            <strong>Note:</strong> the README "Evaluation" section currently shows
+            aspirational targets, not measured values. Run <code>make eval</code> on
+            the Mac to populate <code>reports/eval_*.json</code> with real numbers.
+        </div>
+    </div>
+</section>
+
+<!-- ============================ AI ACT ============================ -->
+<section class="section" id="ia-act" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">EU AI Act</div>
+            <h2 class="section-title">Compliance by design</h2>
+            <p class="section-subtitle">
+                The EU AI Act (Regulation 2024/1689) is in force since Feb 2025; most
+                obligations apply from Aug 2026. For a French project, AI Act
+                awareness is a strong recruiter signal.
+            </p>
+        </div>
+
+        <div style="overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>AI Act topic</th>
+                    <th>Our case</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>System classification</strong></td><td>Minimal risk + Article 50 (transparency chatbot). No decision on persons, no biometrics, no education/employment/justice.</td></tr>
+                <tr><td><strong>Article 50 — Transparency</strong></td><td>UI shows it's an AI copilot (header, sidebar). LLM cites chunk sources. "I don't know" on out-of-scope questions.</td></tr>
+                <tr><td><strong>Article 9 — Risk management</strong></td><td>Risk register with 6 risks (hallucination, prompt injection, leakage, bias, drift, refusals) + mitigations.</td></tr>
+                <tr><td><strong>Article 10 — Data governance</strong></td><td>No PII. NASA public domain + manufacturer technical publications. Provenance and licenses documented.</td></tr>
+                <tr><td><strong>Article 53 — GPAI deployer</strong></td><td>Follows Mistral/Qwen instructions, doesn't alter the model.</td></tr>
+                <tr><td><strong>GDPR</strong></td><td>No personal data, no profiling, no automated decision on persons → no registry or DPIA required.</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+</section>
+
+<!-- ============================ QUICKSTART ============================ -->
+<section class="section" id="quickstart">
+    <div class="container-narrow">
+        <div class="section-header">
+            <div class="section-eyebrow">Quickstart</div>
+            <h2 class="section-title">From zero to demo in ~35 min</h2>
+            <p class="section-subtitle">
+                Five commands, then ask a question in the UI. Tested on MacBook Pro M5 Pro.
+            </p>
+        </div>
+
+        <pre class="code-block"><span class="c"># 1. One-time setup (5 min)</span>
+git clone https://github.com/PDUCLOS/industrial-knowledge-copilot
+cd industrial-knowledge-copilot
+make setup              <span class="c"># venv + ~24 packages</span>
+make pull-models        <span class="c"># Qwen2.5-7B + bge-small (~5 GB, ~30 min)</span>
+make data               <span class="c"># NASA CMAPSS (~12 MB)</span>
+make chroma-up          <span class="c"># ChromaDB on :8001</span>
+
+<span class="c"># 2. Build the index (5 min on first run)</span>
+make ingest
+make eval-dataset
+
+<span class="c"># 3. Run the demo (two terminals)</span>
+make api                <span class="c"># FastAPI on :8000</span>
+make ui                 <span class="c"># Streamlit on :8501</span>
+
+<span class="c"># 4. Open http://localhost:8501 and ask:</span>
+<span class="s">"How many turbofan engines are in the FD001 training set?"</span></pre>
+
+        <div class="callout callout-success mt-5">
+            <strong>10 demo questions</strong> ready for the pitch are in
+            <code>scripts/demo_questions.md</code> — cover factual, reasoning,
+            multi-hop (agent), Schaeffler/SKF, and out-of-scope categories.
+        </div>
+    </div>
+</section>
+
+<!-- ============================ BUGS ============================ -->
+<section class="section" id="bugs" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-header">
+            <div class="section-eyebrow">Engineering rigor</div>
+            <h2 class="section-title">20 bugs found, 20 bugs fixed</h2>
+            <p class="section-subtitle">
+                The project had never actually run before the debug session. The
+                20-bug audit is the strongest story for the interview: it shows the
+                difference between "code compiles" and "system works in production".
+            </p>
+        </div>
+
+        <div style="overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th class="num">Bugs</th>
+                    <th>Examples</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Application logic</td>
+                    <td class="num">6</td>
+                    <td>chain.py: missing import · double retrieval + wrong LCEL type · reranker never triggered · tool multi-args incompatible with ReAct</td>
+                </tr>
+                <tr>
+                    <td>PyPI dependencies</td>
+                    <td class="num">5</td>
+                    <td>mlx==0.24.0 (withdrawn) · <code>langchain-hub</code> wrong package name · <code>langchain-chroma</code> forced chromadb&lt;0.7 · numpy pin conflict · rank-bm25 implicit</td>
+                </tr>
+                <tr>
+                    <td>Configuration</td>
+                    <td class="num">3</td>
+                    <td>MLX_MODEL_REPO undefined in Makefile · embeddings pointed at an MLX-quantized repo incompatible with sentence-transformers</td>
+                </tr>
+                <tr>
+                    <td>Runtime (visible only at execution)</td>
+                    <td class="num">5</td>
+                    <td>NASA readme.txt in CP1252 · PDF chunk_id without page number · llm.py singleton state pydantic v2 incompatibility · Mistral template without system role · _stream() wrong return type</td>
+                </tr>
+                <tr>
+                    <td>Agent / ReAct</td>
+                    <td class="num">1</td>
+                    <td>early_stopping_method removed from recent LangChain</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+</section>
+
+<!-- ============================ FOOTER ============================ -->
+<footer class="site-footer">
+    <div class="container">
+        <div class="flex flex-between">
+            <div>
+                <div class="brand" style="margin-bottom: 8px;">
+                    <div class="brand-mark">IK</div>
+                    <span>Industrial Knowledge Copilot</span>
+                </div>
+                <p class="dim" style="max-width: 480px;">
+                    A local RAG copilot for industrial maintenance, running on Apple
+                    Silicon with MLX. Open-source portfolio project.
+                </p>
+            </div>
+            <div>
+                <h4 style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: 12px;">Project</h4>
+                <div class="footer-links">
+                    <a href="https://github.com/PDUCLOS/industrial-knowledge-copilot">GitHub</a>
+                    <a href="demo.html">Live demo</a>
+                    <a href="docs/PROJECT_OVERVIEW.docx">Project overview (.docx)</a>
+                </div>
+            </div>
+            <div>
+                <h4 style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: 12px;">Author</h4>
+                <div class="footer-links">
+                    <a href="https://www.linkedin.com/in/patriceduclos/">LinkedIn</a>
+                    <a href="https://github.com/PDUCLOS">GitHub</a>
+                    <a href="mailto:patrice@lyonflow.fr">patrice@lyonflow.fr</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-meta">
+            <span>© 2026 Patrice Duclos · RNCP 38777 Lead Data / AI Architect</span>
+            <span>MIT License · Made on Apple Silicon</span>
+        </div>
+    </div>
+</footer>
+
+</body>
+</html>
