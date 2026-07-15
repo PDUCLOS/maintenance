@@ -75,6 +75,9 @@ flowchart LR
 ```
 
 Detailed diagrams and trade-offs: [`docs/architecture.md`](docs/architecture.md).
+For the full pipeline reference (sequence diagrams, IA Act compliance
+section, ADRs): [`docs/pipeline.md`](docs/pipeline.md).
+Editable DrawIO diagrams: [`docs/diagrams/pipeline.drawio`](docs/diagrams/pipeline.drawio).
 
 **Why MLX on the host, ChromaDB in Docker?** Docker Desktop on macOS runs in
 a Linux/arm64 VM — Metal is not exposed there, so MLX would either fail or
