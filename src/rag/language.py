@@ -32,6 +32,8 @@ _FR_HINTS: frozenset[str] = frozenset({
     "mon", "ton", "son", "ma", "ta", "sa", "mes", "tes", "ses", "notre",
     "votre", "leur", "dans", "sur", "sous", "avec", "sans", "pour", "par",
     "est", "sont", "était", "étaient", "fait", "faits", "peut", "peuvent",
+    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles",
+    "ne", "pas", "plus", "aussi", "très", "déjà", "encore", "sais", "sait", "savent",
     # common nouns / adjectives
     "roulement", "roulements", "moteur", "moteurs", "capteur", "capteurs",
     "température", "pression", "vitesse", "durée", "nombre",
