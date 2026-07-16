@@ -189,6 +189,11 @@ If you need to run on Linux/cloud, the architecture supports swapping
 MLX for a Transformers backend (vLLM, TGI, or OpenAI-compatible API). The
 LLM adapter in `src/rag/llm.py` is the only place that needs to change.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full evolution of the project
+(scaffold → W4 → CMAPSS pivot → current state).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
