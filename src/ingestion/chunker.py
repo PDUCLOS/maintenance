@@ -17,8 +17,8 @@ algorithm matches langchain's `RecursiveCharacterTextSplitter`:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import tiktoken
 
@@ -31,10 +31,10 @@ _ENCODING = tiktoken.get_encoding("cl100k_base")
 # Default separators, ordered from most-preferred to least.
 DEFAULT_SEPARATORS: tuple[str, ...] = (
     "\n\n",  # paragraph
-    "\n",    # line
-    ". ",    # sentence
-    " ",     # word
-    "",      # character
+    "\n",  # line
+    ". ",  # sentence
+    " ",  # word
+    "",  # character
 )
 
 
@@ -44,7 +44,7 @@ class Chunk:
 
     chunk_id: str
     text: str
-    source: str          # e.g. "cmapss:FD001" or "pdf:skf_6205.pdf"
+    source: str  # e.g. "cmapss:FD001" or "pdf:skf_6205.pdf"
     metadata: dict[str, str]
 
 
@@ -162,9 +162,7 @@ def recursive_split(
                 refined.append(p)
             else:
                 remaining = tuple(s for s in separators if s != sep) or ("",)
-                refined.extend(
-                    recursive_split(p, chunk_size, chunk_overlap, remaining)
-                )
+                refined.extend(recursive_split(p, chunk_size, chunk_overlap, remaining))
 
     return _merge_with_overlap(refined, chunk_size, chunk_overlap)
 
@@ -184,15 +182,17 @@ def build_chunks(pages: Iterable[tuple[str, str, dict[str, str]]]) -> list[Chunk
         sub_texts = recursive_split(text)
         for j, sub in enumerate(sub_texts):
             chunk_id = f"{source}:{j}"
-            chunks.append(Chunk(
-                chunk_id=chunk_id,
-                text=sub,
-                source=source,
-                # chunk_id is also kept in metadata so the BM25 retriever
-                # can map its hits back to Chroma entries by the same key.
-                metadata={**metadata, "chunk_id": chunk_id, "chunk_index": str(j)},
-            ))
+            chunks.append(
+                Chunk(
+                    chunk_id=chunk_id,
+                    text=sub,
+                    source=source,
+                    # chunk_id is also kept in metadata so the BM25 retriever
+                    # can map its hits back to Chroma entries by the same key.
+                    metadata={**metadata, "chunk_id": chunk_id, "chunk_index": str(j)},
+                )
+            )
     return chunks
 
 
-__all__ = ["Chunk", "count_tokens", "recursive_split", "build_chunks"]
+__all__ = ["Chunk", "build_chunks", "count_tokens", "recursive_split"]

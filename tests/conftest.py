@@ -28,6 +28,7 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_msilicon)
             try:
                 from src.ingestion.cmapss_loader import assert_cmapss_present
+
                 assert_cmapss_present()
             except FileNotFoundError:
                 item.add_marker(skip_cmapss)

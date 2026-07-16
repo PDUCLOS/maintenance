@@ -13,7 +13,6 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # Project root (parent of src/) — used to resolve relative paths in .env
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -40,8 +39,13 @@ class Settings(BaseSettings):
     )
 
     # --- LLM (MLX) ----------------------------------------------------------
+    # Qwen2.5-7B-Instruct, not Mistral-7B-Instruct-v0.3: A/B tested on the
+    # ReAct agent (5 quantitative CMAPSS questions, same harness) —
+    # Mistral scored 1/3 correct (backtick-wrapped tool names, iteration
+    # -limit exhaustion); Qwen2.5 scored 3/3, 5/5 clean tool invocations,
+    # same 4-bit/7B footprint. See PLAN.md §8.
     mlx_model_repo: str = Field(
-        default="mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+        default="mlx-community/Qwen2.5-7B-Instruct-4bit",
         description="HuggingFace repo id for the MLX-quantized LLM.",
     )
     mlx_model_path: str = Field(
@@ -53,11 +57,25 @@ class Settings(BaseSettings):
     mlx_top_p: float = Field(default=0.9, ge=0.0, le=1.0)
 
     # --- Embeddings ---------------------------------------------------------
+    # NOT an MLX repo despite the field name: src/rag/embeddings.py loads
+    # this via sentence-transformers (device="mps"), not MLX. The
+    # "-4bit" mlx-community variant ships MLX-quantized weights (packed
+    # hidden dim) that a plain BertModel/SentenceTransformer can't load
+    # (size mismatch). Use the standard, unquantized checkpoint.
+    #
+    # bge-m3, not bge-small-en-v1.5: corpus is mixed FR/EN (NTN-SNR docs
+    # are French) and users query in French. bge-small-en-v1.5 is
+    # English-only — French queries embedded far from English chunks
+    # (and vice versa), causing silent retrieval failures with no error,
+    # just bad/irrelevant chunks. bge-m3 shares one vector space across
+    # languages including French. Changing this requires a full reindex
+    # (dimension changed 384 -> 1024, incompatible with the old collection).
     mlx_embed_repo: str = Field(
-        default="mlx-community/bge-small-en-v1.5-4bit",
-        description="HuggingFace repo id for the embedding model.",
+        default="BAAI/bge-m3",
+        description="HuggingFace repo id for the embedding model "
+        "(loaded via sentence-transformers, must be a standard/unquantized checkpoint).",
     )
-    embed_dim: int = Field(default=384, description="Embedding vector dimension.")
+    embed_dim: int = Field(default=1024, description="Embedding vector dimension.")
 
     # --- ChromaDB -----------------------------------------------------------
     chroma_host: str = Field(default="localhost")
@@ -114,7 +132,7 @@ class Settings(BaseSettings):
 
     def assert_python_version(self) -> None:
         """Raise if Python < 3.12."""
-        if sys.version_info < (3, 12):
+        if sys.version_info < (3, 12):  # noqa: UP036 (runtime guard, not dead code)
             raise RuntimeError(
                 f"Python 3.12+ required, found {sys.version_info.major}.{sys.version_info.minor}."
             )

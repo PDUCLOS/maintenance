@@ -14,7 +14,7 @@
 > Concrètement : on ingère les **fiches techniques PDF** et les
 > **données structurées CMAPSS de la NASA** (capteurs de turbofan), on
 > les chunk, on les embed, on les stocke dans **ChromaDB**, et un
-> **Mistral 7B** tournant en local sur mon Mac — pas d'API payante —
+> **Qwen2.5-7B** tournant en local sur mon Mac — pas d'API payante —
 > génère la réponse avec les sources citées.
 >
 > Le truc différenciant, c'est l'**agent avec tool calling Python** : si
@@ -61,17 +61,29 @@
 
 ## 3 questions pièges recruteur + réponses
 
-### 1. "Pourquoi Mistral 7B et pas GPT-4 ou Claude ?"
+### 1. "Pourquoi Qwen2.5-7B et pas GPT-4 ou Claude ?"
 
 > "Trois raisons. Premièrement, c'est local : pour un POC industriel qui
 > touche à des données de maintenance, on ne veut pas que les données
 > sortent de la machine. Deuxièmement, c'est gratuit à l'usage, ce qui
 > rend le POC industrialisable sans coût marginal. Troisièmement, en 4-bit
 > quantisé, il passe sur mon MacBook Pro M5 Pro avec 2 à 5 secondes de
-> latence par requête, ce qui est utilisable pour de la démo. Sur des
-> questions factuelles, il est tout à fait au niveau — et pour la prod,
-> le code est agnostique : on peut swap Mistral contre un LLM distant
-> via un seul adapter."
+> latence par requête, ce qui est utilisable pour de la démo. Le code est
+> agnostique au modèle — un seul adapter à changer pour swap vers un LLM
+> distant."
+
+### 1bis. "Pourquoi Qwen et pas Mistral, vu que le projet est présenté à des entreprises françaises ?"
+
+> "J'ai d'abord testé Mistral-7B-Instruct-v0.3, cohérent avec l'ancrage
+> français du projet. Mais sur l'agent avec tool calling (format ReAct
+> strict), j'ai mesuré empiriquement 1 bonne réponse sur 3 questions
+> quantitatives — le modèle enrobait le nom de l'outil en backticks
+> markdown, ce qui cassait le matching exact, ou épuisait la limite
+> d'itérations. Qwen2.5-7B, même taille, même empreinte mémoire, a
+> obtenu 3/3 avec le même harnais de test. J'ai documenté la comparaison
+> dans `PLAN.md` §8 plutôt que de deviner — c'est un point que j'assume
+> et que je peux détailler si la question revient : le choix du modèle
+> vient d'une mesure, pas d'une préférence de marque."
 
 ### 2. "Comment tu gères les hallucinations ?"
 

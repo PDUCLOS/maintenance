@@ -24,7 +24,10 @@ from langchain_core.documents import Document
 
 from src.config import settings
 from src.rag.embeddings import Embedder
-from src.rag.reranker import RERANK_OVERFETCH, Reranker  # noqa: F401  (Reranker kept importable from retriever for back-compat)
+from src.rag.reranker import (
+    RERANK_OVERFETCH,
+    Reranker,
+)
 from src.rag.types import RetrievedChunk  # re-export for back-compat
 from src.rag.vectorstore import VectorStore
 from src.utils.logger import logger
@@ -106,10 +109,7 @@ class HybridRetriever:
         was never triggered.
         """
         # Decide how many candidates to fetch from the base retrievers
-        if self.reranker is not None:
-            fetch_k = max(top_k, top_k * RERANK_OVERFETCH)
-        else:
-            fetch_k = top_k
+        fetch_k = max(top_k, top_k * RERANK_OVERFETCH) if self.reranker is not None else top_k
 
         if not settings.hybrid_search:
             chunks = self._dense_only(query, fetch_k)

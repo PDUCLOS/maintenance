@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes import eval as eval_route
+from src.api.routes import index as index_route
 from src.api.routes import ingest as ingest_route
 from src.api.routes import query as query_route
 from src.api.schemas import HealthResponse
@@ -24,8 +25,12 @@ from src.utils.logger import logger
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Verify Chroma reachability at startup. Fail fast if it's not up."""
-    logger.info("API starting (log_level={}, chroma={}:{})",
-                settings.log_level, settings.chroma_host, settings.chroma_port)
+    logger.info(
+        "API starting (log_level={}, chroma={}:{})",
+        settings.log_level,
+        settings.chroma_host,
+        settings.chroma_port,
+    )
     try:
         n = VectorStore().count()
         logger.info("Chroma reachable, collection has {} documents", n)
@@ -58,6 +63,7 @@ app.add_middleware(
 app.include_router(query_route.router)
 app.include_router(ingest_route.router)
 app.include_router(eval_route.router)
+app.include_router(index_route.router)
 
 
 @app.get("/", tags=["meta"])

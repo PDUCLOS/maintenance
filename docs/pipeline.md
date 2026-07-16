@@ -264,7 +264,7 @@ Le prompt système (chargé depuis `system_fr.txt`) inclut la consigne
 #### 4.4 Génération LLM
 
 `MLXChatModel._generate(messages)` :
-- Charge Mistral 7B (4-bit, MLX) à la première invocation (~10 s)
+- Charge Qwen2.5-7B (4-bit, MLX) à la première invocation (~10 s)
 - Construit le prompt via `tokenizer.apply_chat_template`
 - Appelle `mlx_lm.generate()` avec `max_tokens=1024, temp=0.1, top_p=0.9`
 - Retourne `AIMessage(content=text)`
@@ -506,7 +506,7 @@ utilisé dans un domaine à haut risque (emploi, santé, justice, etc.).
 | **Refus abusif** (LLM dit "je ne sais pas" trop souvent) | Moyenne | Faible | RAGAS answer_relevancy > 0.75, tests sur les 5 questions out-of-scope |
 | **Prompt injection** (utilisateur manipule le LLM) | Faible | Moyen | Pas d'instruction cachée dans les PDF, prompt système strict, tool whitelisté |
 | **Fuite de données** | Très faible | Élevé | 100 % local, pas d'API cloud, logs sanitizés |
-| **Biais du modèle** (Mistral 7B a des biais) | Moyenne | Faible | Le système est technique, pas génératif d'opinions ; corpus restreint (CMAPSS) |
+| **Biais du modèle** (Qwen2.5-7B a des biais) | Moyenne | Faible | Le système est technique, pas génératif d'opinions ; corpus restreint (CMAPSS) |
 | **Dérive de qualité** (rebuild Chroma, métriques RAGAS chutent) | Faible | Moyen | CI avec tests d'intégration, snapshot RAGAS par release |
 
 **Process** : à chaque release, on re-run `make eval`, on diff les
@@ -544,11 +544,15 @@ n'importe quelle métrique bloque la release.
 
 ### 8.6 Article 53 — GPAI (General Purpose AI) deployer
 
-> Mistral 7B est un GPAI. On est **déployeur** d'un modèle tiers,
-> pas fournisseur.
+> Qwen2.5-7B (Alibaba Cloud) est un GPAI. On est **déployeur** d'un
+> modèle tiers, pas fournisseur. Le modèle est open-weight (licence
+> Apache 2.0 pour Qwen2.5), téléchargé et exécuté 100% localement —
+> aucune donnée ne transite par un service tiers, ce qui limite les
+> obligations de déployeur aux points ci-dessous plutôt qu'à un accord
+> de traitement de données.
 
 **Obligations du déployeur** (Article 53) :
-- ✅ Suivre les instructions d'utilisation du fournisseur Mistral
+- ✅ Suivre les instructions d'utilisation du fournisseur (Alibaba Cloud / Qwen)
 - ✅ Transparence sur les limitations du modèle
 - ✅ Pas de modification substantielle du modèle (on l'utilise tel quel)
 
@@ -622,7 +626,7 @@ passer en production, il faudrait en plus :
 | Context recall RAGAS | > 0.55 | > 0.65 | `make eval` |
 | Tests pytest verts | 100 % | 100 % | `make test` + `make test-integration` |
 | Coverage | > 50 % | > 60 % | `make test-cov` |
-| Time to first answer (cold start) | < 20 s | < 15 s | Manual benchmark (Mistral load ~10s + LLM ~3s) |
+| Time to first answer (cold start) | < 20 s | < 15 s | Manual benchmark (Qwen2.5 load ~10s + LLM ~3s) |
 
 ## 11. Glossaire
 
@@ -632,7 +636,7 @@ passer en production, il faudrait en plus :
 | **ChromaDB** | Vector store open-source, persistant, accessible via HTTP. |
 | **HNSW** | Hierarchical Navigable Small World — algo d'ANN (Approximate Nearest Neighbors) pour la recherche vectorielle rapide. |
 | **MLX** | Framework ML d'Apple, optimisé pour Apple Silicon (Metal, mémoire unifiée). |
-| **mlx-lm** | Package qui wraps MLX pour l'inference de LLMs (Mistral, Llama, etc.). |
+| **mlx-lm** | Package qui wraps MLX pour l'inference de LLMs (Qwen, Mistral, Llama, etc.). |
 | **MPS** | Metal Performance Shaders — backend GPU de PyTorch/CoreML sur Mac. |
 | **BM25** | Algorithme de ranking lexical classique (Robertson, années 90). |
 | **RRF** | Reciprocal Rank Fusion. Méthode de fusion de rankings sans calibration. |

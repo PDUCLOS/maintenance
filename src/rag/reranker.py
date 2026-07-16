@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     # between retriever.py and reranker.py.
     from src.rag.types import RetrievedChunk
 
-# Over-fetch multiplier: we ask the retriever for this × top_k candidates,
+# Over-fetch multiplier: we ask the retriever for this x top_k candidates,
 # then the reranker trims to top_k. Higher = more reranker work but better recall.
 RERANK_OVERFETCH = 3
 
@@ -59,9 +59,9 @@ class Reranker:
     def rerank(
         self,
         query: str,
-        chunks: list["RetrievedChunk"],
+        chunks: list[RetrievedChunk],
         top_n: int,
-    ) -> list["RetrievedChunk"]:
+    ) -> list[RetrievedChunk]:
         """Rerank `chunks` for `query`, return top_n by cross-encoder score.
 
         If `chunks` is empty or has ≤ top_n items, returns as-is (or trimmed).
@@ -84,23 +84,25 @@ class Reranker:
         scores = Reranker._model.predict(pairs, show_progress_bar=False)
 
         # Sort by score descending, take top_n
-        scored = list(zip(chunks, scores))
+        scored = list(zip(chunks, scores, strict=False))
         scored.sort(key=lambda x: float(x[1]), reverse=True)
         top = scored[:top_n]
 
         # Rebuild RetrievedChunks with the new score
         out: list[RetrievedChunk] = []
         for c, s in top:
-            out.append(RetrievedChunk(
-                chunk_id=c.chunk_id,
-                text=c.text,
-                source=c.source,
-                metadata=c.metadata,
-                score=float(s),
-                retrieval_method="reranked",
-            ))
+            out.append(
+                RetrievedChunk(
+                    chunk_id=c.chunk_id,
+                    text=c.text,
+                    source=c.source,
+                    metadata=c.metadata,
+                    score=float(s),
+                    retrieval_method="reranked",
+                )
+            )
         logger.debug("Reranked {} -> top {}", len(chunks), top_n)
         return out
 
 
-__all__ = ["Reranker", "RERANK_OVERFETCH"]
+__all__ = ["RERANK_OVERFETCH", "Reranker"]

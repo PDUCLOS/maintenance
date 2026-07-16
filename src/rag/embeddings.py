@@ -20,6 +20,8 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from langchain_core.embeddings import Embeddings
+
 from src.config import settings
 from src.utils.logger import logger
 
@@ -48,7 +50,9 @@ class Embedder:
 
             logger.info("Loading embedding model {}", self._repo)
             Embedder._model = SentenceTransformer(self._repo, device="mps")
-            logger.info("Embedding model ready (dim={})", self._model.get_sentence_embedding_dimension())
+            logger.info(
+                "Embedding model ready (dim={})", self._model.get_sentence_embedding_dimension()
+            )
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of texts. Returns a list of float vectors."""
@@ -72,4 +76,22 @@ class Embedder:
         return self._dim
 
 
-__all__ = ["Embedder"]
+class LangChainEmbedder(Embeddings):
+    """Adapts `Embedder` to the `langchain_core.embeddings.Embeddings` ABC.
+
+    Needed to pass our local embedding model into RAGAS's `evaluate(...,
+    embeddings=...)` — without this, RAGAS defaults to OpenAI embeddings,
+    which contradicts the "100% local, no API key" pitch.
+    """
+
+    def __init__(self, embedder: Embedder | None = None) -> None:
+        self._embedder = embedder or Embedder()
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._embedder.embed(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embedder.embed([text])[0]
+
+
+__all__ = ["Embedder", "LangChainEmbedder"]

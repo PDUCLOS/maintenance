@@ -63,12 +63,14 @@ def load_pdf(pdf_path: Path) -> list[PdfPage]:
         for i, page in enumerate(doc):
             text = page.get_text("text")  # plain text extraction
             if text and text.strip():
-                pages.append(PdfPage(
-                    text=text,
-                    file_name=pdf_path.name,
-                    page_number=i + 1,
-                    total_pages=total,
-                ))
+                pages.append(
+                    PdfPage(
+                        text=text,
+                        file_name=pdf_path.name,
+                        page_number=i + 1,
+                        total_pages=total,
+                    )
+                )
     finally:
         doc.close()
     return pages
@@ -87,4 +89,4 @@ def load_all_pdfs() -> list[PdfPage]:
     return pages
 
 
-__all__ = ["PdfPage", "list_pdfs", "load_pdf", "load_all_pdfs"]
+__all__ = ["PdfPage", "list_pdfs", "load_all_pdfs", "load_pdf"]

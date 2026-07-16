@@ -14,17 +14,17 @@ from __future__ import annotations
 
 import pytest
 
-from src.ingestion.cmapss_loader import COLUMN_NAMES, SUBSETS, expected_files
 from src.ingestion.chunker import (
     build_chunks,
     count_tokens,
     recursive_split,
 )
-
+from src.ingestion.cmapss_loader import COLUMN_NAMES, SUBSETS, expected_files
 
 # ============================================================
 # Unit tests (no data required)
 # ============================================================
+
 
 def test_cmapss_column_count():
     """CMAPSS has 26 columns: 1 unit + 1 cycle + 3 op_settings + 21 sensors."""
@@ -97,8 +97,7 @@ def test_recursive_split_overlap_creates_continuity():
     tail = chunks[0][-100:]
     head = chunks[1][:100]
     assert any(
-        token in head
-        for token in tail.split()[-5:]
+        token in head for token in tail.split()[-5:]
     ), "Expected at least 1 word overlap between adjacent chunks"
 
 
@@ -131,6 +130,7 @@ def test_build_chunks_skips_empty():
 # ============================================================
 # Integration tests (require NASA CMAPSS data)
 # ============================================================
+
 
 @pytest.mark.integration
 def test_load_train_returns_dataframe():

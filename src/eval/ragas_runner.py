@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.config import settings
@@ -38,7 +38,7 @@ class EvalSnapshot:
 
 _METRIC_REGISTRY: dict[str, str] = {
     "faithfulness": "ragas.metrics.faithfulness",
-    "answer_relevancy": "ragas.metrics.answer_relevance",  # legacy alias
+    "answer_relevancy": "ragas.metrics.answer_relevancy",
     "context_precision": "ragas.metrics.context_precision",
     "context_recall": "ragas.metrics.context_recall",
 }
@@ -47,10 +47,9 @@ _METRIC_REGISTRY: dict[str, str] = {
 def _load_metric(name: str):
     """Import a RAGAS metric by short name. Raises if unknown."""
     if name not in _METRIC_REGISTRY:
-        raise ValueError(
-            f"Unknown metric: {name!r}. Known: {list(_METRIC_REGISTRY)}"
-        )
+        raise ValueError(f"Unknown metric: {name!r}. Known: {list(_METRIC_REGISTRY)}")
     import importlib
+
     mod_path, attr = _METRIC_REGISTRY[name].rsplit(".", 1)
     mod = importlib.import_module(mod_path)
     return getattr(mod, attr)
@@ -75,16 +74,18 @@ def _build_ragas_samples(items: list[dict], chain: RAGChain) -> list[dict]:
             response = chain.query(question)
             answer = response.answer
             contexts = [c.text for c in response.sources]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Sample {} failed: {}", i, e)
             answer = "ERROR: chain failed"
             contexts = []
-        samples.append({
-            "question": question,
-            "answer": answer,
-            "contexts": contexts,
-            "ground_truth": item["ground_truth"],
-        })
+        samples.append(
+            {
+                "question": question,
+                "answer": answer,
+                "contexts": contexts,
+                "ground_truth": item["ground_truth"],
+            }
+        )
         logger.info("Eval sample {}/{} done", i, len(items))
     return samples
 
@@ -92,6 +93,7 @@ def _build_ragas_samples(items: list[dict], chain: RAGChain) -> list[dict]:
 def _build_hf_dataset(samples: list[dict]):
     """Convert samples to a HuggingFace Dataset (what RAGAS expects)."""
     from datasets import Dataset
+
     return Dataset.from_list(samples)
 
 
@@ -114,17 +116,43 @@ def run(dataset_path: Path, metrics: list[str]) -> EvalSnapshot:
     # Resolve metric objects
     metric_objs = [_load_metric(name) for name in metrics]
 
-    # Run RAGAS
+    # Run RAGAS with our local LLM + embeddings, not RAGAS's OpenAI default
+    # — required to keep the "100% local, no API key" claim true.
     from ragas import evaluate
+    from ragas.run_config import RunConfig
 
-    logger.info("Running RAGAS with metrics: {}", metrics)
-    result = evaluate(hf_ds, metrics=metric_objs)
+    from src.rag.embeddings import LangChainEmbedder
+
+    # RAGAS defaults to max_workers=16 (concurrent threads). MLX's Metal
+    # command stream is bound to the thread that first touched the GPU —
+    # calling our local LLM from 16 worker threads at once makes every
+    # thread but one fail with `RuntimeError: There is no Stream(gpu, 0)
+    # in current thread.`. We have one local GPU, so force sequential
+    # evaluation (max_workers=1) — slower, but the only way every sample
+    # actually gets a real score instead of erroring out.
+    #
+    # timeout=600 (RAGAS default is 180s): a generous timeout matters more
+    # here than it would for an API-backed LLM. If a single slow-but-fine
+    # MLX generation gets cancelled by asyncio.wait_for, the underlying
+    # Python thread keeps running anyway (a ThreadPoolExecutor future can't
+    # be interrupted mid-call) — that zombie generation then interleaves
+    # with the next job queued on the same dedicated thread and corrupts
+    # its output (observed: 1024 repeated "!" characters). A short timeout
+    # doesn't skip a slow sample cleanly, it corrupts the *next* one too.
+    logger.info("Running RAGAS with metrics: {} (local LLM + embeddings, sequential)", metrics)
+    result = evaluate(
+        hf_ds,
+        metrics=metric_objs,
+        llm=chain.llm,
+        embeddings=LangChainEmbedder(chain.embedder),
+        run_config=RunConfig(max_workers=1, timeout=600),
+    )
 
     # Extract scores (result is a Result object; .scores is a pandas DataFrame)
     metric_results: list[MetricResult] = []
     try:
         scores_df = result.to_pandas()  # one column per metric
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error("Could not convert RAGAS result to DataFrame: {}", e)
         raise
     for name in metrics:
@@ -139,7 +167,7 @@ def run(dataset_path: Path, metrics: list[str]) -> EvalSnapshot:
 
 
 def _snapshot(metrics: list[MetricResult], n_samples: int) -> EvalSnapshot:
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
     out = settings.processed_data_dir.parent / "reports" / f"eval_{ts}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = {

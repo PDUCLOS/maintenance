@@ -1,409 +1,391 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="app.diagrams.net" agent="Mavis/0.1" version="24.7.0">
+<mxfile host="Electron" agent="Mavis/0.1" pages="3">
   <diagram name="Pipeline overview" id="pipeline-overview">
-    <mxGraphModel dx="1422" dy="846" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1186" dy="650" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-
-        <!-- ===== Title ===== -->
-        <mxCell id="title" value="Industrial Knowledge Copilot — Pipeline overview" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="40" y="20" width="1100" height="40" as="geometry" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1" value="Industrial Knowledge Copilot — Pipeline overview" vertex="1">
+          <mxGeometry height="40" width="1100" x="40" y="20" as="geometry" />
         </mxCell>
-
-        <!-- ===== Swimlane: Data sources ===== -->
-        <mxCell id="lane-data" value="Data sources (gitignored, on host)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=14" vertex="1" parent="1">
-          <mxGeometry x="40" y="80" width="1140" height="180" as="geometry" />
+        <mxCell id="lane-data" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=14" value="Data sources (gitignored, on host)" vertex="1">
+          <mxGeometry height="180" width="1140" x="40" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="cmapss" value="NASA CMAPSS&#10;(train/test/RUL × FD001-004)&#10;+ readme.txt" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="80" y="140" width="160" height="100" as="geometry" />
-        </mxCell>
-        <mxCell id="pdf" value="Technical PDFs&#10;(Schaeffler, SKF, …)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="280" y="140" width="160" height="100" as="geometry" />
-        </mxCell>
-        <mxCell id="readme" value="readme.txt +&#10;Damage Propagation&#10;Modeling.pdf" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
-          <mxGeometry x="500" y="140" width="180" height="100" as="geometry" />
-        </mxCell>
-
-        <!-- ===== Swimlane: Ingestion (one-shot) ===== -->
-        <mxCell id="lane-ingest" value="1. Ingestion (one-shot per rebuild) — src/ingestion/" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1f5e1;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=14" vertex="1" parent="1">
-          <mxGeometry x="40" y="290" width="1140" height="220" as="geometry" />
-        </mxCell>
-        <mxCell id="load-cm" value="cmapss_loader.py&#10;pandas DataFrame&#10;(26 cols × N rows)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="80" y="350" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="load-pdf" value="pdf_loader.py&#10;PyMuPDF&#10;list[PdfPage]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="280" y="350" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="chunker" value="chunker.py&#10;recursive split&#10;500 tok / 50 overlap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="500" y="350" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="embed" value="Embedder&#10;bge-small (4-bit, MPS)&#10;Metal direct" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="720" y="350" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="chroma-write" value="Chroma upsert&#10;HTTP :8001" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="940" y="350" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="jsonl" value="chunks.jsonl&#10;(audit trail)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
-          <mxGeometry x="720" y="450" width="160" height="50" as="geometry" />
-        </mxCell>
-
-        <!-- ===== Swimlane: Query (per request) ===== -->
-        <mxCell id="lane-query" value="2. Query (per request) — src/rag/, src/api/, src/ui/" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14" vertex="1" parent="1">
-          <mxGeometry x="40" y="540" width="1140" height="220" as="geometry" />
-        </mxCell>
-        <mxCell id="ui" value="Streamlit UI&#10;:8501&#10;(chat + sources)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="80" y="600" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="api" value="FastAPI&#10;:8000&#10;/query /ingest /eval" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="280" y="600" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="chain" value="RAG Chain (LCEL)&#10;retriever → prompt → LLM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="500" y="600" width="160" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="retriever" value="HybridRetriever&#10;RRF(dense, BM25)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="720" y="560" width="160" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="llm" value="MLXChatModel&#10;Mistral 7B (4-bit)&#10;Metal / Neural Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="940" y="600" width="160" height="80" as="geometry" />
-        </mxCell>
-
-        <!-- ===== Swimlane: Evaluation ===== -->
-        <mxCell id="lane-eval" value="3. Evaluation (per release) — src/eval/" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;fontStyle=1;fontSize=14" vertex="1" parent="1">
-          <mxGeometry x="40" y="790" width="1140" height="180" as="geometry" />
-        </mxCell>
-        <mxCell id="eval-ds" value="eval_dataset.jsonl&#10;30 Q&amp;A from CMAPSS&#10;(deterministic seed=42)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="80" y="850" width="200" height="100" as="geometry" />
-        </mxCell>
-        <mxCell id="ragas" value="RAGAS evaluate&#10;faithfulness / relevancy&#10;context precision / recall" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="320" y="850" width="200" height="100" as="geometry" />
-        </mxCell>
-        <mxCell id="report" value="reports/eval_&lt;ts&gt;.json&#10;(snapshot immutable)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="560" y="850" width="200" height="100" as="geometry" />
-        </mxCell>
-
-        <!-- ===== Persistent state (cross-swimlane) ===== -->
-        <mxCell id="chroma-store" value="ChromaDB&#10;(Docker, :8001)&#10;persistent volume" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="940" y="140" width="180" height="100" as="geometry" />
-        </mxCell>
-        <mxCell id="bm25" value="BM25 index&#10;(in-memory, rebuilt&#10;on demand)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
-          <mxGeometry x="940" y="850" width="180" height="100" as="geometry" />
-        </mxCell>
-
-        <!-- ===== Agent (sub-component) ===== -->
-        <mxCell id="agent" value="Agent (optional)&#10;query_cmapss tool&#10;closed DSL → pandas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" vertex="1" parent="1">
-          <mxGeometry x="720" y="640" width="160" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="df" value="CMAPSS DataFrame&#10;(in-process, pandas)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" vertex="1" parent="1">
-          <mxGeometry x="720" y="720" width="160" height="50" as="geometry" />
-        </mxCell>
-
-        <!-- ===== Edges: ingestion flow ===== -->
-        <mxCell id="e1" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="cmapss" target="load-cm">
+        <mxCell id="dfDqTBevyG8d33AHCCKP-2" edge="1" parent="1" source="cmapss" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="load-cm" value="">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e2" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="pdf" target="load-pdf">
+        <mxCell id="cmapss" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="NASA CMAPSS&#xa;(train/test/RUL × FD001-004)&#xa;+ readme.txt" vertex="1">
+          <mxGeometry height="100" width="160" x="80" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="pdf" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="Technical PDFs&#xa;(Schaeffler, SKF, …)" vertex="1">
+          <mxGeometry height="100" width="160" x="280" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="readme" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" value="readme.txt +&#xa;Damage Propagation&#xa;Modeling.pdf" vertex="1">
+          <mxGeometry height="100" width="180" x="500" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-ingest" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1f5e1;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=14" value="1. Ingestion (one-shot per rebuild) — src/ingestion/" vertex="1">
+          <mxGeometry height="220" width="1140" x="40" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="load-cm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="cmapss_loader.py&#xa;pandas DataFrame&#xa;(26 cols × N rows)" vertex="1">
+          <mxGeometry height="80" width="160" x="80" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="load-pdf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="pdf_loader.py&#xa;PyMuPDF&#xa;list[PdfPage]" vertex="1">
+          <mxGeometry height="80" width="160" x="280" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="chunker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="chunker.py&#xa;recursive split&#xa;500 tok / 50 overlap" vertex="1">
+          <mxGeometry height="80" width="160" x="500" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="embed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="Embedder&#xa;bge-small (4-bit, MPS)&#xa;Metal direct" vertex="1">
+          <mxGeometry height="80" width="160" x="720" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="chroma-write" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="Chroma upsert&#xa;HTTP :8001" vertex="1">
+          <mxGeometry height="80" width="160" x="940" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="jsonl" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" value="chunks.jsonl&#xa;(audit trail)" vertex="1">
+          <mxGeometry height="50" width="160" x="720" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-query" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14" value="2. Query (per request) — src/rag/, src/api/, src/ui/" vertex="1">
+          <mxGeometry height="220" width="1140" x="40" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="ui" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="Streamlit UI&#xa;:8501&#xa;(chat + sources)" vertex="1">
+          <mxGeometry height="80" width="160" x="80" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="FastAPI&#xa;:8000&#xa;/query /ingest /eval" vertex="1">
+          <mxGeometry height="80" width="160" x="280" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="chain" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="RAG Chain (LCEL)&#xa;retriever → prompt → LLM" vertex="1">
+          <mxGeometry height="80" width="160" x="500" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="retriever" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="HybridRetriever&#xa;RRF(dense, BM25)" vertex="1">
+          <mxGeometry height="60" width="160" x="720" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="MLXChatModel&#xa;Mistral 7B (4-bit)&#xa;Metal / Neural Engine" vertex="1">
+          <mxGeometry height="80" width="160" x="940" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-eval" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;fontStyle=1;fontSize=14" value="3. Evaluation (per release) — src/eval/" vertex="1">
+          <mxGeometry height="180" width="1140" x="40" y="790" as="geometry" />
+        </mxCell>
+        <mxCell id="eval-ds" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="eval_dataset.jsonl&#xa;30 Q&amp;A from CMAPSS&#xa;(deterministic seed=42)" vertex="1">
+          <mxGeometry height="100" width="200" x="80" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="ragas" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" value="RAGAS evaluate&#xa;faithfulness / relevancy&#xa;context precision / recall" vertex="1">
+          <mxGeometry height="100" width="200" x="320" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="report" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="reports/eval_&lt;ts&gt;.json&#xa;(snapshot immutable)" vertex="1">
+          <mxGeometry height="100" width="200" x="560" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="chroma-store" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="ChromaDB&#xa;(Docker, :8001)&#xa;persistent volume" vertex="1">
+          <mxGeometry height="100" width="180" x="940" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="bm25" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="BM25 index&#xa;(in-memory, rebuilt&#xa;on demand)" vertex="1">
+          <mxGeometry height="100" width="180" x="940" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="agent" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" value="Agent (optional)&#xa;query_cmapss tool&#xa;closed DSL → pandas" vertex="1">
+          <mxGeometry height="60" width="160" x="720" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="df" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" value="CMAPSS DataFrame&#xa;(in-process, pandas)" vertex="1">
+          <mxGeometry height="50" width="160" x="720" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="cmapss" style="endArrow=classic;html=1;strokeColor=#82b366;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="160" y="250" as="sourcePoint" />
+            <mxPoint x="160" y="350" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" style="endArrow=classic;html=1;strokeColor=#82b366" target="load-pdf">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="360" y="240" as="sourcePoint" />
+            <mxPoint x="360" y="350" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="readme" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;strokeColor=#82b366;exitPerimeter=0;" target="load-cm">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e3" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="readme" target="load-cm">
+        <mxCell id="e4" edge="1" parent="1" source="load-cm" style="endArrow=classic;html=1;exitX=0.811;exitY=1.012;exitDx=0;exitDy=0;strokeColor=#82b366;exitPerimeter=0;entryX=0.144;entryY=1.012;entryDx=0;entryDy=0;entryPerimeter=0;" target="chunker" value="DataFrame">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="210" y="480" />
+              <mxPoint x="370" y="480" />
+              <mxPoint x="523" y="480" />
+            </Array>
+            <mxPoint x="522" y="420" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="load-pdf" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#82b366" target="chunker" value="PdfPage">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e4" value="DataFrame" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="load-cm" target="chunker">
+        <mxCell id="e6" edge="1" parent="1" source="chunker" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#82b366" target="embed" value="Chunk[]">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e5" value="PdfPage" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="load-pdf" target="chunker">
+        <mxCell id="e7" edge="1" parent="1" source="embed" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#82b366" target="chroma-write" value="vectors">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e6" value="Chunk[]" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="chunker" target="embed">
+        <mxCell id="e8" edge="1" parent="1" source="chroma-write" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#82b366" target="chroma-store" value="HTTP">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e7" value="vectors" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="embed" target="chroma-write">
+        <mxCell id="e9" edge="1" parent="1" source="chunker" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#d6b656;dashed=1;entryPerimeter=0;" target="jsonl" value="dump">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e8" value="HTTP" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#82b366" edge="1" parent="1" source="chroma-write" target="chroma-store">
+        <mxCell id="q1" edge="1" parent="1" source="ui" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" target="api" value="HTTP POST">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e9" value="dump" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#d6b656;dashed=1" edge="1" parent="1" source="chunker" target="jsonl">
+        <mxCell id="q2" edge="1" parent="1" source="api" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" target="chain" value="invoke">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <!-- ===== Edges: query flow ===== -->
-        <mxCell id="q1" value="HTTP POST" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" edge="1" parent="1" source="ui" target="api">
+        <mxCell id="q3" edge="1" parent="1" source="chain" style="endArrow=classic;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" target="retriever" value="retrieve">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q2" value="invoke" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" edge="1" parent="1" source="api" target="chain">
+        <mxCell id="q4" edge="1" parent="1" source="retriever" style="endArrow=classic;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf;dashed=1;entryPerimeter=0;" target="chroma-store" value="dense">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1170" y="580" />
+              <mxPoint x="1170" y="460" />
+              <mxPoint x="1170" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q5" edge="1" parent="1" source="retriever" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf;dashed=1" target="bm25" value="BM25">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q3" value="retrieve" style="endArrow=classic;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" edge="1" parent="1" source="chain" target="retriever">
+        <mxCell id="q6" edge="1" parent="1" source="chain" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" target="llm" value="prompt+ctx">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q4" value="dense" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#6c8ebf;dashed=1" edge="1" parent="1" source="retriever" target="chroma-store">
+        <mxCell id="q7" edge="1" parent="1" source="chain" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;dashed=1" target="agent" value="tool call (opt)">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q5" value="BM25" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf;dashed=1" edge="1" parent="1" source="retriever" target="bm25">
+        <mxCell id="q8" edge="1" parent="1" source="agent" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;dashed=1" target="df" value="pandas">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q6" value="prompt+ctx" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf" edge="1" parent="1" source="chain" target="llm">
+        <mxCell id="ev1" edge="1" parent="1" source="eval-ds" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#b85450" target="ragas" value="Q&amp;A">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q7" value="tool call (opt)" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;dashed=1" edge="1" parent="1" source="chain" target="agent">
+        <mxCell id="ev2" edge="1" parent="1" source="ragas" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#b85450;dashed=1;exitPerimeter=0" target="chain" value="uses chain">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="q8" value="pandas" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;dashed=1" edge="1" parent="1" source="agent" target="df">
+        <mxCell id="ev3" edge="1" parent="1" source="ragas" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#b85450" target="report" value="snapshot">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <!-- ===== Edges: eval flow ===== -->
-        <mxCell id="ev1" value="Q&amp;A" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#b85450" edge="1" parent="1" source="eval-ds" target="ragas">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="legend-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#999999" value="" vertex="1">
+          <mxGeometry height="140" width="1140" x="40" y="1000" as="geometry" />
         </mxCell>
-        <mxCell id="ev2" value="uses chain" style="endArrow=classic;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#b85450;dashed=1;exitPerimeter=0" edge="1" parent="1" source="ragas" target="chain">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="legend-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" value="Legend" vertex="1">
+          <mxGeometry height="20" width="200" x="60" y="1010" as="geometry" />
         </mxCell>
-        <mxCell id="ev3" value="snapshot" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#b85450" edge="1" parent="1" source="ragas" target="report">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="leg-data" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" value="Data source (file)" vertex="1">
+          <mxGeometry height="30" width="140" x="60" y="1040" as="geometry" />
         </mxCell>
-
-        <!-- ===== Legend ===== -->
-        <mxCell id="legend-box" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#999999" vertex="1" parent="1">
-          <mxGeometry x="40" y="1000" width="1140" height="140" as="geometry" />
+        <mxCell id="leg-service" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10" value="Service / module" vertex="1">
+          <mxGeometry height="30" width="140" x="220" y="1040" as="geometry" />
         </mxCell>
-        <mxCell id="legend-title" value="Legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="60" y="1010" width="200" height="20" as="geometry" />
+        <mxCell id="leg-ml" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" value="ML model (local)" vertex="1">
+          <mxGeometry height="30" width="140" x="380" y="1040" as="geometry" />
         </mxCell>
-        <mxCell id="leg-data" value="Data source (file)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
-          <mxGeometry x="60" y="1040" width="140" height="30" as="geometry" />
+        <mxCell id="leg-agent" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" value="Agent / DSL" vertex="1">
+          <mxGeometry height="30" width="140" x="540" y="1040" as="geometry" />
         </mxCell>
-        <mxCell id="leg-service" value="Service / module" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10" vertex="1" parent="1">
-          <mxGeometry x="220" y="1040" width="140" height="30" as="geometry" />
+        <mxCell id="leg-store" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=center;" value="Persistent store" vertex="1">
+          <mxGeometry height="30" width="140" x="700" y="1040" as="geometry" />
         </mxCell>
-        <mxCell id="leg-ml" value="ML model (local)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
-          <mxGeometry x="380" y="1040" width="140" height="30" as="geometry" />
+        <mxCell id="leg-note" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" value="Audit trail / artefact" vertex="1">
+          <mxGeometry height="30" width="140" x="860" y="1040" as="geometry" />
         </mxCell>
-        <mxCell id="leg-agent" value="Agent / DSL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" vertex="1" parent="1">
-          <mxGeometry x="540" y="1040" width="140" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="leg-store" value="Persistent store" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
-          <mxGeometry x="700" y="1040" width="140" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="leg-note" value="Audit trail / artefact" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
-          <mxGeometry x="860" y="1040" width="140" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="leg-note-1" value="Solid arrow = data flow on hot path. Dashed arrow = secondary / optional / cold path." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2" vertex="1" parent="1">
-          <mxGeometry x="60" y="1080" width="700" height="30" as="geometry" />
+        <mxCell id="leg-note-1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2" value="Solid arrow = data flow on hot path. Dashed arrow = secondary / optional / cold path." vertex="1">
+          <mxGeometry height="30" width="700" x="60" y="1080" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
-
   <diagram name="Data flow (per query)" id="data-flow">
-    <mxGraphModel dx="1422" dy="846" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1915" dy="1052" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-
-        <mxCell id="title" value="Data flow — one query, end-to-end" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="40" y="20" width="1100" height="40" as="geometry" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1" value="Data flow — one query, end-to-end" vertex="1">
+          <mxGeometry height="40" width="1100" x="40" y="20" as="geometry" />
         </mxCell>
-
-        <!-- Sequence: lifelines -->
-        <mxCell id="ll-user" value="User" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="60" y="80" width="100" height="40" as="geometry" />
+        <mxCell id="ll-user" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" value="User" vertex="1">
+          <mxGeometry height="40" width="100" x="60" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="ll-ui" value="Streamlit&#10;UI" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="220" y="80" width="100" height="40" as="geometry" />
+        <mxCell id="ll-ui" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1" value="Streamlit&#xa;UI" vertex="1">
+          <mxGeometry height="40" width="100" x="220" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="ll-api" value="FastAPI" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="380" y="80" width="100" height="40" as="geometry" />
+        <mxCell id="ll-api" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1" value="FastAPI" vertex="1">
+          <mxGeometry height="40" width="100" x="380" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="ll-chain" value="RAG&#10;Chain" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="540" y="80" width="100" height="40" as="geometry" />
+        <mxCell id="ll-chain" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1" value="RAG&#xa;Chain" vertex="1">
+          <mxGeometry height="40" width="100" x="540" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="ll-emb" value="Embedder&#10;(MPS)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="700" y="80" width="100" height="40" as="geometry" />
+        <mxCell id="ll-emb" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1" value="Embedder&#xa;(MPS)" vertex="1">
+          <mxGeometry height="40" width="100" x="700" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="ll-ret" value="Hybrid&#10;Retriever" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="860" y="80" width="100" height="40" as="geometry" />
+        <mxCell id="ll-ret" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1" value="Hybrid&#xa;Retriever" vertex="1">
+          <mxGeometry height="40" width="100" x="860" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="ll-llm" value="MLX&#10;LLM" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="1020" y="80" width="100" height="40" as="geometry" />
+        <mxCell id="ll-llm" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1" value="MLX&#xa;LLM" vertex="1">
+          <mxGeometry height="40" width="100" x="1020" y="80" as="geometry" />
         </mxCell>
-
-        <!-- Lifelines (vertical lines) -->
-        <mxCell id="l1" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" edge="1" parent="1" source="ll-user" target="ll-user">
+        <mxCell id="l1" edge="1" parent="1" source="ll-user" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" target="ll-user">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="110" y="120" as="sourcePoint" />
             <mxPoint x="110" y="1100" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="l2" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" edge="1" parent="1" source="ll-ui" target="ll-ui">
+        <mxCell id="l2" edge="1" parent="1" source="ll-ui" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" target="ll-ui">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="270" y="120" as="sourcePoint" />
             <mxPoint x="270" y="1100" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="l3" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" edge="1" parent="1" source="ll-api" target="ll-api">
+        <mxCell id="l3" edge="1" parent="1" source="ll-api" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" target="ll-api">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="430" y="120" as="sourcePoint" />
             <mxPoint x="430" y="1100" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="l4" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" edge="1" parent="1" source="ll-chain" target="ll-chain">
+        <mxCell id="l4" edge="1" parent="1" source="ll-chain" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" target="ll-chain">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="590" y="120" as="sourcePoint" />
             <mxPoint x="590" y="1100" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="l5" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" edge="1" parent="1" source="ll-emb" target="ll-emb">
+        <mxCell id="l5" edge="1" parent="1" source="ll-emb" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" target="ll-emb">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="750" y="120" as="sourcePoint" />
             <mxPoint x="750" y="1100" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="l6" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" edge="1" parent="1" source="ll-ret" target="ll-ret">
+        <mxCell id="l6" edge="1" parent="1" source="ll-ret" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" target="ll-ret">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="910" y="120" as="sourcePoint" />
             <mxPoint x="910" y="1100" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="l7" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" edge="1" parent="1" source="ll-llm" target="ll-llm">
+        <mxCell id="l7" edge="1" parent="1" source="ll-llm" style="endArrow=none;dashed=1;html=1;strokeColor=#999999" target="ll-llm">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="1070" y="120" as="sourcePoint" />
             <mxPoint x="1070" y="1100" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-
-        <!-- Steps -->
-        <mxCell id="s1" value="1. Type question + send" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-user" target="ll-ui">
+        <mxCell id="s1" edge="1" parent="1" source="ll-user" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-ui" value="1. Type question + send">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s2" value="2. POST /query {question, top_k}" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-ui" target="ll-api">
+        <mxCell id="s2" edge="1" parent="1" source="ll-ui" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-api" value="2. POST /query {question, top_k}">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s3" value="3. chain.query(question)" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-api" target="ll-chain">
+        <mxCell id="s3" edge="1" parent="1" source="ll-api" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-chain" value="3. chain.query(question)">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s4" value="4. embed([question]) → qv (384-dim, ~50ms on M-series)" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-chain" target="ll-emb">
+        <mxCell id="s4" edge="1" parent="1" source="ll-chain" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-emb" value="4. embed([question]) → qv (384-dim, ~50ms on M-series)">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s5" value="5. retrieve(q, k=5) — RRF(dense, BM25)" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-chain" target="ll-ret">
+        <mxCell id="s5" edge="1" parent="1" source="ll-chain" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-ret" value="5. retrieve(q, k=5) — RRF(dense, BM25)">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s6" value="5a. dense: chroma query (HTTP, ~30ms)" style="endArrow=classic;html=1;strokeColor=#6c8ebf;dashed=1" edge="1" parent="1" source="ll-ret">
+        <mxCell id="s6" edge="1" parent="1" source="ll-ret" style="endArrow=classic;html=1;strokeColor=#6c8ebf;dashed=1" value="5a. dense: chroma query (HTTP, ~30ms)">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s6b" value="5b. BM25: in-mem scan (~5ms for &lt; 5k chunks)" style="endArrow=classic;html=1;strokeColor=#6c8ebf;dashed=1" edge="1" parent="1" source="ll-ret">
+        <mxCell id="s6b" edge="1" parent="1" source="ll-ret" style="endArrow=classic;html=1;strokeColor=#6c8ebf;dashed=1" value="5b. BM25: in-mem scan (~5ms for &lt; 5k chunks)">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s7" value="6. context (top-5 chunks, formatted) + question" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-chain" target="ll-llm">
+        <mxCell id="s7" edge="1" parent="1" source="ll-chain" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-llm" value="6. context (top-5 chunks, formatted) + question">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s8" value="7. mlx_lm.generate(...) → answer (2-5s on M-series GPU)" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-llm" target="ll-chain">
+        <mxCell id="s8" edge="1" parent="1" source="ll-llm" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-chain" value="7. mlx_lm.generate(...) → answer (2-5s on M-series GPU)">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s9" value="8. RAGResponse{answer, sources}" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-chain" target="ll-api">
+        <mxCell id="s9" edge="1" parent="1" source="ll-chain" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-api" value="8. RAGResponse{answer, sources}">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s10" value="9. JSON {answer, sources, latency_ms}" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-api" target="ll-ui">
+        <mxCell id="s10" edge="1" parent="1" source="ll-api" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-ui" value="9. JSON {answer, sources, latency_ms}">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s11" value="10. Render markdown + sources in chat" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="ll-ui" target="ll-user">
+        <mxCell id="s11" edge="1" parent="1" source="ll-ui" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-user" value="10. Render markdown + sources in chat">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="0" y="-5" as="offset" />
+            <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-
-        <!-- Latency annotation -->
-        <mxCell id="latency-note" value="Typical latency budget on MacBook Pro M5 Pro:&#10;embed 50ms + retrieve 35ms + LLM generate 2-5s + overhead 50ms = ~3-6s end-to-end" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left" vertex="1" parent="1">
-          <mxGeometry x="40" y="900" width="540" height="80" as="geometry" />
+        <mxCell id="latency-note" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left" value="Typical latency budget on MacBook Pro M5 Pro:&#xa;embed 50ms + retrieve 35ms + LLM generate 2-5s + overhead 50ms = ~3-6s end-to-end" vertex="1">
+          <mxGeometry height="80" width="540" x="40" y="900" as="geometry" />
         </mxCell>
-
-        <!-- Cross-cutting concerns -->
-        <mxCell id="xcut" value="Cross-cutting (every step):&#10;• loguru: emit JSON event with question_id, latency, chunk_count, model&#10;• Pydantic validation on request/response&#10;• Hardware guard: MLX refuses to load on non-Apple-Silicon (fail-fast)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left" vertex="1" parent="1">
-          <mxGeometry x="620" y="900" width="500" height="100" as="geometry" />
+        <mxCell id="xcut" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left" value="Cross-cutting (every step):&#xa;• loguru: emit JSON event with question_id, latency, chunk_count, model&#xa;• Pydantic validation on request/response&#xa;• Hardware guard: MLX refuses to load on non-Apple-Silicon (fail-fast)" vertex="1">
+          <mxGeometry height="100" width="500" x="620" y="900" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
-
   <diagram name="Deployment" id="deployment">
     <mxGraphModel dx="1422" dy="846" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-
         <mxCell id="title" value="Deployment — what runs where" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1" vertex="1" parent="1">
           <mxGeometry x="40" y="20" width="1100" height="40" as="geometry" />
         </mxCell>
-
         <!-- Host box -->
         <mxCell id="host" value="macOS host — MacBook Pro M5 Pro (Apple Silicon, 18-36 GB RAM unifiée, Metal GPU)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1f5e1;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=13" vertex="1" parent="1">
           <mxGeometry x="40" y="80" width="700" height="700" as="geometry" />
         </mxCell>
-        <mxCell id="venv" value="Python 3.12 venv (.venv/)&#10;src/ + tests/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+        <mxCell id="venv" value="Python 3.12 venv (.venv/)&#xa;src/ + tests/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="140" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="mlx-llm-box" value="MLX LLM&#10;Mistral 7B (4-bit)&#10;Metal direct" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+        <mxCell id="mlx-llm-box" value="MLX LLM&#xa;Mistral 7B (4-bit)&#xa;Metal direct" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="240" width="200" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="mlx-emb-box" value="MPS Embedder&#10;bge-small (4-bit)&#10;sentence-transformers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+        <mxCell id="mlx-emb-box" value="MPS Embedder&#xa;bge-small (4-bit)&#xa;sentence-transformers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="360" width="200" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="uvicorn" value="Uvicorn&#10;FastAPI :8000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
+        <mxCell id="uvicorn" value="Uvicorn&#xa;FastAPI :8000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="480" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="streamlit" value="Streamlit&#10;:8501" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
+        <mxCell id="streamlit" value="Streamlit&#xa;:8501" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="580" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="hf-cache" value="HuggingFace cache&#10;~/.cache/huggingface/hub/&#10;~5 GB (Mistral + bge)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
+        <mxCell id="hf-cache" value="HuggingFace cache&#xa;~/.cache/huggingface/hub/&#xa;~5 GB (Mistral + bge)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="500" y="140" width="220" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="data-raw" value="data/raw/&#10;CMAPSS + PDFs" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
+        <mxCell id="data-raw" value="data/raw/&#xa;CMAPSS + PDFs" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="500" y="280" width="220" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="data-proc" value="data/processed/&#10;chunks.jsonl&#10;eval_dataset.jsonl" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
+        <mxCell id="data-proc" value="data/processed/&#xa;chunks.jsonl&#xa;eval_dataset.jsonl" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="500" y="400" width="220" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="logs" value="logs/app.log&#10;(rotated 10 MB)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
+        <mxCell id="logs" value="logs/app.log&#xa;(rotated 10 MB)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="500" y="540" width="220" height="60" as="geometry" />
         </mxCell>
-
         <!-- Docker Desktop box -->
         <mxCell id="docker" value="Docker Desktop — Linux/arm64 VM" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=13" vertex="1" parent="1">
           <mxGeometry x="780" y="80" width="320" height="700" as="geometry" />
         </mxCell>
-        <mxCell id="chroma-container" value="chroma 0.5.23&#10;:8000 (container)&#10;→ :8001 (host)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+        <mxCell id="chroma-container" value="chroma 0.5.23&#xa;:8000 (container)&#xa;→ :8001 (host)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="820" y="160" width="240" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="chroma-volume" value="ikc-chroma-data&#10;(Docker named volume)&#10;persistent on disk" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
+        <mxCell id="chroma-volume" value="ikc-chroma-data&#xa;(Docker named volume)&#xa;persistent on disk" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="820" y="280" width="240" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="docker-note" value="Metal is NOT exposed to the Linux/arm64 VM.&#10;MLX cannot run in Docker on Mac.&#10;Chroma has no such constraint." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;align=left" vertex="1" parent="1">
+        <mxCell id="docker-note" value="Metal is NOT exposed to the Linux/arm64 VM.&#xa;MLX cannot run in Docker on Mac.&#xa;Chroma has no such constraint." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;align=left" vertex="1" parent="1">
           <mxGeometry x="820" y="440" width="240" height="120" as="geometry" />
         </mxCell>
-
         <!-- Edges inside host -->
         <mxCell id="h1" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="venv" target="mlx-llm-box">
           <mxGeometry relative="1" as="geometry" />
@@ -432,7 +414,6 @@
         <mxCell id="h9" value="writes" style="endArrow=classic;html=1;strokeColor=#000000" edge="1" parent="1" source="uvicorn" target="logs">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
         <!-- Cross edge: host -> Docker -->
         <mxCell id="x1" value="HTTP :8001" style="endArrow=classic;html=1;strokeColor=#6c8ebf" edge="1" parent="1" source="uvicorn" target="chroma-container">
           <mxGeometry relative="1" as="geometry" />
@@ -440,9 +421,8 @@
         <mxCell id="x2" value="mount" style="endArrow=classic;html=1;strokeColor=#82b366;dashed=1" edge="1" parent="1" source="chroma-container" target="chroma-volume">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
         <!-- CPU/GPU note -->
-        <mxCell id="hw-note" value="Hardware budget (M5 Pro, 18 GB):&#10;• OS: ~3 GB&#10;• Mistral 7B 4-bit: ~5 GB&#10;• bge-small + Chroma client: ~0.5 GB&#10;• Uvicorn + Streamlit: ~0.5 GB&#10;• Headroom: ~8 GB free" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left" vertex="1" parent="1">
+        <mxCell id="hw-note" value="Hardware budget (M5 Pro, 18 GB):&#xa;• OS: ~3 GB&#xa;• Mistral 7B 4-bit: ~5 GB&#xa;• bge-small + Chroma client: ~0.5 GB&#xa;• Uvicorn + Streamlit: ~0.5 GB&#xa;• Headroom: ~8 GB free" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left" vertex="1" parent="1">
           <mxGeometry x="40" y="820" width="1060" height="120" as="geometry" />
         </mxCell>
       </root>

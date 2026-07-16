@@ -49,7 +49,6 @@ from src.ingestion.cmapss_loader import SUBSETS, load_rul, load_train
 from src.utils.logger import logger
 from src.utils.timing import timed
 
-
 SUPPORTED_OPS: tuple[str, ...] = (
     "mean_sensor",
     "min_sensor",
@@ -95,13 +94,9 @@ def _parse_dsl_query(query: str) -> tuple[str | None, str, dict[str, str]]:
         if "=" in tok:
             k, v = tok.split("=", 1)
             k, v = k.strip(), v.strip()
+            params[k] = v
             if k == "subset" and v in SUBSETS:
-                # explicit subset=... overrides the default; we don't
-                # also store it in params (the tool reads it via the
-                # `subset` arg, not via params["subset"]).
                 subset = v
-            else:
-                params[k] = v
         elif tok in SUBSETS:
             # positional subset wins over the default
             subset = tok
@@ -110,6 +105,7 @@ def _parse_dsl_query(query: str) -> tuple[str | None, str, dict[str, str]]:
 
 
 # --- Sensor validation ------------------------------------------------------
+
 
 def _resolve_sensor(sensor: Any, df: pd.DataFrame) -> tuple[str | None, str | None]:
     """Validate `sensor` and return (col_name, None) or (None, error_msg).
@@ -158,6 +154,7 @@ def _get_dataframe(subset: str) -> pd.DataFrame:
 
 
 # --- Core implementation ----------------------------------------------------
+
 
 def _format_number(value: float) -> str:
     if pd.isna(value):
@@ -217,13 +214,11 @@ def _query_cmapss_impl(operation: str, subset: str, **params: Any) -> str:
             f"mean={_format_number(cycles_per_unit.mean())}."
         )
 
-    return (
-        f"Unsupported operation: {operation!r}. "
-        f"Supported: {', '.join(SUPPORTED_OPS)}."
-    )
+    return f"Unsupported operation: {operation!r}. " f"Supported: {', '.join(SUPPORTED_OPS)}."
 
 
 # --- Tool wrapper -----------------------------------------------------------
+
 
 @tool
 def query_cmapss(query: str) -> str:
@@ -244,19 +239,18 @@ def query_cmapss(query: str) -> str:
     """
     operation, subset, params = _parse_dsl_query(query)
     if operation is None:
-        return (
-            "Error: empty query. Use one of: "
-            + ", ".join(SUPPORTED_OPS)
-        )
+        return "Error: empty query. Use one of: " + ", ".join(SUPPORTED_OPS)
     if operation not in SUPPORTED_OPS:
-        return (
-            f"Unsupported operation: {operation!r}. "
-            f"Supported: {', '.join(SUPPORTED_OPS)}."
-        )
-    return _query_cmapss_impl(operation, subset, **params)
+        return f"Unsupported operation: {operation!r}. " f"Supported: {', '.join(SUPPORTED_OPS)}."
+    # `params` may still carry a "subset" key (the parser reports it there
+    # for callers that only care about the raw dict) — drop it, since
+    # `subset` is already passed positionally and would otherwise collide.
+    call_params = {k: v for k, v in params.items() if k != "subset"}
+    return _query_cmapss_impl(operation, subset, **call_params)
 
 
 # --- Agent ------------------------------------------------------------------
+
 
 @dataclass
 class AgentResponse:
@@ -275,16 +269,18 @@ class CMAPSSCopilotAgent:
         self._agent = self._build_agent()
 
     def _build_agent(self):
-        """Build a ReAct agent using the standard LangChain helper."""
-        from langchain import hub
+        """Build a ReAct agent using the standard LangChain helper.
+
+        Uses the local few-shot prompt (`_local_react_prompt`), not the
+        generic zero-shot `hwchase17/react` hub prompt: measured baseline
+        was 0/3 correct tool invocations on Mistral-7B with the hub
+        prompt (iteration-limit or hallucinated answers). See
+        `_local_react_prompt` docstring and PLAN.md §8.
+        """
         from langchain.agents import AgentExecutor, create_react_agent
 
         settings.assert_apple_silicon()
-        try:
-            prompt = hub.pull("hwchase17/react")
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Could not pull ReAct prompt from hub: {}. Using fallback.", e)
-            prompt = _local_react_prompt()
+        prompt = _local_react_prompt()
 
         agent = create_react_agent(
             llm=self.rag.llm,
@@ -296,8 +292,17 @@ class CMAPSSCopilotAgent:
             tools=self.tools,
             verbose=False,
             max_iterations=4,
-            early_stopping_method="generate",
+            # "generate" was removed for LCEL-based (RunnableAgent) agents —
+            # this build raises `ValueError: Got unsupported
+            # early_stopping_method 'generate'` on the current langchain.
+            # "force" (the class default) is the only method this agent
+            # type supports.
+            early_stopping_method="force",
             handle_parsing_errors=True,
+            # Without this, `invoke()`'s result dict has no
+            # "intermediate_steps" key, so `run()` below always reports
+            # zero tool calls even when the tool was genuinely invoked.
+            return_intermediate_steps=True,
         )
 
     @timed
@@ -318,29 +323,61 @@ class CMAPSSCopilotAgent:
 
 
 def _local_react_prompt():
-    """A minimal ReAct prompt that works offline (no hub access)."""
+    """A few-shot ReAct prompt, tuned for reliable tool use on a 7B model.
+
+    The generic zero-shot `hwchase17/react` hub prompt measured 0/3 on a
+    baseline of quantitative CMAPSS questions with Mistral-7B-Instruct: the
+    model either hit the iteration limit or skipped the tool and
+    hallucinated a plausible-looking number straight to "Final Answer".
+    Small models need to see the exact Action/Action Input format worked
+    through end-to-end, not just described — hence the two worked examples
+    below (one tool call, one out-of-scope "no tool needed" case).
+    """
     from langchain_core.prompts import PromptTemplate
 
-    template = """Tu es un copilote technique pour la maintenance industrielle.
-Tu as accès à des outils pour répondre aux questions.
+    template = """Tu es un copilote technique pour la maintenance industrielle. Tu as accès à un outil pour interroger le jeu de données CMAPSS.
 
-When responding, use this exact format:
+Réponds avec EXACTEMENT ce format, sans rien ajouter avant "Question:" ni après "Final Answer:".
+N'utilise JAMAIS de backticks, de guillemets, ni de formatage markdown autour du nom de l'outil
+ou de son entrée — écris-les en texte brut, exactement comme dans les exemples ci-dessous.
 
-Question: the input question
-Thought: think about what to do
-Action: the action to take, one of [{tool_names}]
-Action Input: the input to the action (a SINGLE string)
-Observation: the result of the action
-... (repeat Thought/Action/Action Input/Observation as needed)
-Thought: I now have the answer
-Final Answer: the final answer to the original question
+Question: la question posée
+Thought: raisonne sur ce qu'il faut faire
+Action: le nom de l'outil à utiliser, un parmi [{tool_names}] (texte brut, sans backticks)
+Action Input: l'entrée de l'outil, une seule ligne de texte brut (sans backticks ni guillemets)
+Observation: le résultat de l'outil
+... (répète Thought/Action/Action Input/Observation autant que nécessaire)
+Thought: j'ai maintenant la réponse
+Final Answer: la réponse finale à la question
 
-Tu réponds en français sauf si la question est en anglais.
-
-Tools available:
+Outils disponibles:
 {tools}
 
-Tool names: {tool_names}
+Noms des outils: {tool_names}
+
+--- Exemple 1 (question quantitative -> utiliser l'outil) ---
+Question: What is the mean of sensor_11 in FD002?
+Thought: This is a quantitative question about a specific sensor and subset. I must use query_cmapss, not guess a number myself.
+Action: query_cmapss
+Action Input: mean_sensor subset=FD002 sensor=11
+Observation: Mean of sensor_11 in FD002: 42.99.
+Thought: I now have the answer
+Final Answer: The mean of sensor_11 in FD002 is 42.99.
+
+--- Exemple 2 (question quantitative simple -> utiliser l'outil) ---
+Question: How many engines are in the FD001 training set?
+Thought: This asks for a count of engines in a specific subset. I must use query_cmapss with unit_count, not guess.
+Action: query_cmapss
+Action Input: unit_count FD001
+Observation: FD001 has 100 engines in the training set.
+Thought: I now have the answer
+Final Answer: FD001 has 100 engines in the training set.
+
+--- Fin des exemples ---
+
+Règle: pour toute question quantitative (moyenne, min, max, compte, cycles), utilise TOUJOURS query_cmapss d'abord. Ne devine jamais un chiffre sans l'avoir obtenu de l'outil.
+
+Tu réponds en français sauf si la question est en anglais.
 
 Question: {input}
 Thought:{agent_scratchpad}"""
@@ -348,10 +385,10 @@ Thought:{agent_scratchpad}"""
 
 
 __all__ = [
-    "CMAPSSCopilotAgent",
-    "AgentResponse",
-    "query_cmapss",
     "SUPPORTED_OPS",
+    "AgentResponse",
+    "CMAPSSCopilotAgent",
     "_parse_dsl_query",
     "_query_cmapss_impl",
+    "query_cmapss",
 ]

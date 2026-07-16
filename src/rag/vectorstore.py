@@ -25,9 +25,16 @@ class VectorStore:
     """
 
     def __init__(self) -> None:
+        # anonymized_telemetry=False: chromadb's bundled posthog client has
+        # a broken capture() call on this version ("capture() takes 1
+        # positional argument but 3 were given") — harmless on its own, but
+        # when it fires from a second process re-instantiating the client
+        # (e.g. Streamlit re-running the whole script on every interaction)
+        # it segfaults the interpreter instead of just logging the error.
         self._client = chromadb.HttpClient(
             host=settings.chroma_host,
             port=settings.chroma_port,
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
         )
         self._collection = self._client.get_or_create_collection(
             name=settings.chroma_collection,
@@ -45,9 +52,7 @@ class VectorStore:
             logger.warning("upsert called with empty chunks list")
             return
         if len(chunks) != len(vectors):
-            raise ValueError(
-                f"chunks/vectors length mismatch: {len(chunks)} vs {len(vectors)}"
-            )
+            raise ValueError(f"chunks/vectors length mismatch: {len(chunks)} vs {len(vectors)}")
         self._collection.upsert(
             ids=[c.chunk_id for c in chunks],
             embeddings=vectors,

@@ -1,9 +1,8 @@
-# Industrial Knowledge Copilot — Plan de projet détaillé
+# Industrial Knowledge Copilot — Plan de projet
 
-> **Repo GitHub cible :** `github.com/PDUCLOS/industrial-knowledge-copilot` (à confirmer)
+> **Repo GitHub cible :** `github.com/PDUCLOS/industrial-knowledge-copilot` (à créer/pousser)
 > **Auteur :** Patrice Duclos · RNCP 38777 Lead Data / AI Architect
-> **Statut :** draft v1 — 2026-07-15
-> **Effort estimé :** 3-4 weekends (≈ 30-40 h)
+> **Statut :** ✅ **build fonctionnel, vérifié end-to-end sur Apple Silicon (M5 Pro) — 2026-07-15**
 > **Objectif :** projet portfolio qui bouche le gap #1 du CV (LLM/RAG/IA générative en production)
 
 ---
@@ -14,421 +13,266 @@
 
 > "J'ai 14 ans de technico-commercial B2B chez Michaud Chailly, 6 ans de pilotage data-driven chez DEXIS BFC, et une plateforme MLOps de production (LyonFlow).
 >
-> Sur ce projet, j'ai pris ce vécu terrain et j'ai construit un copilote RAG qui répond à des questions techniques sur des produits industriels en croisant fiches techniques PDF et données structurées. Le tout en local — pas d'API payante — avec une évaluation RAGAS pour mesurer la qualité des réponses, et une stack industrialisée (Docker Compose, FastAPI, Streamlit, monitoring).
+> Sur ce projet, j'ai pris ce vécu terrain et construit un copilote RAG qui répond à des questions techniques sur des produits industriels en croisant fiches techniques PDF (4 300 pages Schaeffler/SKF) et données structurées NASA CMAPSS. Le tout en local — pas d'API payante, 100% Apple Silicon/MLX — avec une évaluation RAGAS, du retrieval hybride (BM25 + dense + reranking cross-encoder), et un agent avec tool calling sur DataFrame.
 >
 > C'est exactement le scope d'un POC d'IA générative appliqué à l'industrie, tel qu'on le voit dans les JDs Data Scientist/Architecte IA 2026."
 
-### Pourquoi ce projet te fait gagner des points
+### Pourquoi ce projet fait gagner des points
 
 | Critère d'évaluation recruteur | Ce que le projet prouve |
 |-------------------------------|-------------------------|
-| Maîtrise LLM / RAG / IA générative | Chaîne RAG complète + prompt engineering + évaluation |
-| Industrialisation | Docker Compose, logs structurés, monitoring, tests |
-| Sensibilité métier B2B | Cas d'usage industriel cohérent avec ton parcours |
-| Évaluation de modèles IA | RAGAS — métriques standardisées (faithfulness, answer relevancy) |
-| Veille techno | Stack 2026 (LangChain v0.3, Ollama, Mistral 7B, ChromaDB) |
-| Communication technique | README pro, architecture diagram, démo live |
+| Maîtrise LLM / RAG / IA générative | Chaîne RAG complète (hybride + reranking) + agent tool-calling + évaluation RAGAS |
+| Industrialisation | Docker Compose, logs structurés JSON, tests pytest, CI |
+| Sensibilité métier B2B | Cas d'usage industriel (roulements, maintenance prédictive) cohérent avec le parcours |
+| Évaluation de modèles IA | RAGAS — métriques standardisées (faithfulness, answer relevancy, context precision/recall) |
+| Rigueur d'ingénierie | Diagnostic et résolution d'une chaîne de ~15 bugs réels (dépendances, API, logique) — voir §7 |
+| Sens du compromis technique | Décisions documentées : MLX natif vs Docker, ReAct 7B vs modèle plus gros (voir §8) |
+| Communication technique | README pro, architecture diagram Mermaid, pitch entretien rédigé |
 
 ---
 
-## 2. Cas d'usage cible (à confirmer)
+## 2. Cas d'usage retenu
 
-### Option A — Maintenance prédictive (RECOMMANDÉE pour toi)
-- **Domaine :** prédiction de panne / RUL (Remaining Useful Life) sur machines industrielles
-- **Data publique :** NASA CMAPSS (turbofan engine degradation) — 4 sous-datasets, doc technique NASA
-- **Pourquoi :** alignement avec ton ADN Carrier HVAC / DEXIS BFC industriel
-- **Type de RAG :** hybride — RAG sur docs techniques + tool calling Python pour interroger les données CMAPSS
-
-### Option B — Fiches produits B2B
-- **Domaine :** questions techniques sur produits (roulements, transmission, visserie…)
-- **Data :** catalogues PDF publics (SKF, Schaeffler, NTN-SNR, Michaud Chailly si tu retrouves des docs)
-- **Pourquoi :** très parlant pour des recruteurs B2B/industrie
-- **Type de RAG :** pur retrieval sur PDF
-
-### Option C — Documentation interne RH / IT (générique)
-- **Domaine :** assistant pour répondre aux questions employés (congés, IT, onboarding)
-- **Data :** tu synthétises 30-50 faux documents (FAQ, politiques, procédures)
-- **Pourquoi :** très demandé par ESN et scale-ups
-- **Type de RAG :** pur retrieval + multi-turn conversation
-
-**→ Mon avis : Option A (CMAPSS)** — combine RAG classique ET agent avec tool calling Python sur DataFrame. Double compétence visible en entretien. Data NASA est libre, propre, et l'angle maintenance prédictive résonne direct avec Carrier HVAC / DEXIS.
+**Option A — Maintenance prédictive (choisie et implémentée)**
+- **Domaine :** prédiction de panne / RUL (Remaining Useful Life) sur turbofans
+- **Data :** NASA CMAPSS (4 sous-datasets, 100+ Mo) + 7 catalogues PDF Schaeffler/SKF (4 313 pages, 135 Mo)
+- **Pourquoi :** alignement avec l'ADN Carrier HVAC / DEXIS BFC industriel, et combine RAG classique + agent tool-calling → double compétence visible en entretien
+- **Type de RAG :** hybride — retrieval sur docs techniques (PDF + CMAPSS textualisé) + tool calling Python (DSL fermé, pas d'exécution de code arbitraire) pour les questions quantitatives
 
 ---
 
-## 3. Architecture technique
+## 3. Architecture technique (implémentée)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Streamlit UI (chat)                      │
-│                    localhost:8501                            │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                FastAPI  /query  /ingest  /eval              │
-│                localhost:8000                                │
-└──────┬──────────────────────┬───────────────────────────────┘
-       │                      │
-       ▼                      ▼
-┌──────────────┐      ┌────────────────────────────────┐
-│   LangChain  │      │       RAGAS Evaluator          │
-│   RAG Chain  │      │  (faithfulness, relevancy…)   │
-└──────┬───────┘      └────────────────────────────────┘
-       │
-       ├─────► Ollama (LLM local)        :11434
-       │       └─ Mistral 7B Instruct
-       │
-       ├─────► Ollama (Embeddings)       :11435
-       │       └─ nomic-embed-text
-       │
-       └─────► ChromaDB (vector store)   :8001
-               └─ persistent volume
+```mermaid
+flowchart LR
+    UI[Streamlit UI<br/>:8501<br/>4 tabs] -->|HTTP| API[FastAPI<br/>:8000]
+    API -->|invoke| RAG[RAG Chain<br/>LangChain LCEL]
+    RAG -->|embed| EMB[bge-small<br/>MPS]
+    RAG -->|retrieve| HYB[Hybrid Retriever<br/>RRF]
+    HYB -->|dense| CHR[(ChromaDB<br/>:8001, Docker)]
+    HYB -->|BM25| BM25[(In-memory<br/>BM25 index)]
+    HYB -.->|over-fetch x3| RR[Cross-Encoder<br/>Reranker]
+    RAG -->|generate| LLM[Qwen2.5-7B<br/>MLX natif]
+    RAG -->|tool| TOOL[query_cmapss<br/>DSL fermé]
+    TOOL --> DF[(CMAPSS<br/>DataFrame, cached)]
 ```
 
-### Stack détaillée (toutes versions pinning dans `requirements.txt`)
+**Pourquoi MLX natif + Chroma Docker :** Docker Desktop sur macOS tourne dans une VM Linux/arm64 — Metal n'y est pas exposé, donc MLX planterait ou tomberait en CPU silencieux. On refuse ce compromis : MLX tourne sur l'hôte (Metal direct), ChromaDB tourne en Docker (pas de contrainte GPU).
 
-| Composant | Technologie | Pourquoi ce choix |
-|-----------|-------------|-------------------|
-| **LLM** | Ollama + Mistral 7B Instruct (Q4_K_M) | Local, gratuit, FR correct, 4 Go RAM, pas d'API key |
-| **Embeddings** | Ollama + nomic-embed-text | Local, multilingue, 137M params, rapide |
-| **Orchestration** | LangChain v0.3+ | Standard marché 2026, demandé dans 80% JDs |
-| **Vector store** | ChromaDB (persistent) | Local, simple, suffisant pour < 100k chunks |
-| **API** | FastAPI + Uvicorn | Déjà maîtrisé (LyonFlow) |
-| **UI** | Streamlit | Déjà maîtrisé, parfait pour démo |
-| **Évaluation** | RAGAS v0.2+ | Standard de fait pour évaluer un RAG |
-| **Container** | Docker Compose (1 service = 1 container) | Reproductible, pas de pollution locale |
-| **Tests** | pytest + RAGAS eval suite | Pas de mock — tests sur vraies données NASA |
-| **Logs** | loguru (structurés JSON) | Format uniforme, parseable |
-| **Data source A** | NASA CMAPSS (4 datasets + readme) | Libre, industriel, 100+ Mo |
-| **Data source B** | 5-10 PDF techniques PDF (Schaeffler, NTN…) | Libres, multilingues |
+### Stack réelle (toutes versions pinnées dans `requirements.txt`, résolues sans conflit)
 
-### Estimation ressources (Mac M-series ou Linux)
+| Composant | Technologie | Version | Pourquoi ce choix |
+|-----------|-------------|---------|-------------------|
+| **LLM** | Qwen2.5-7B Instruct (MLX, 4-bit) | `mlx-lm==0.28.4` | Local, gratuit, natif Apple Silicon, meilleure fiabilité ReAct mesurée (§8) |
+| **Embeddings** | BAAI/bge-small-en-v1.5 (sentence-transformers, MPS) | `sentence-transformers==3.2.1` | 33M params, rapide, qualité EN solide |
+| **Vector store** | ChromaDB (Docker) | `chromadb==0.6.3` (client) | Local, simple, suffisant < 100k chunks |
+| **Orchestration** | LangChain LCEL | `langchain==0.3.13` | Standard marché 2026 |
+| **Retrieval hybride** | BM25 + dense, fusion RRF | `rank-bm25==0.2.2` | Capture les identifiants exacts (FD001, capteurs) que le dense seul rate |
+| **Reranking** | Cross-encoder MS MARCO | `sentence-transformers` | Précision top-K après over-fetch ×3 |
+| **Évaluation** | RAGAS | `ragas==0.2.10` | Standard de fait pour métriques RAG |
+| **API** | FastAPI + Uvicorn | `fastapi==0.115.5` | Type-safe, rapide |
+| **UI** | Streamlit | `streamlit==1.41.1` | Démo rapide, facile à partager |
+| **Container** | Docker Compose (ChromaDB seul) | — | Reproductible, pas de pollution hôte |
 
-- RAM : 8 Go suffisent (Mistral 7B Q4 = 4.4 Go, embeddings 0.3 Go, + 2 Go OS)
-- Disque : 6 Go pour les modèles + 1 Go data + 2 Go code/env
-- GPU : pas obligatoire (CPU OK, ~10-20 sec/query). GPU Metal MPS = 2-3x plus rapide
-
----
-
-## 4. Arborescence GitHub cible
-
-```
-industrial-knowledge-copilot/
-├── README.md                    # pitch + archi diagram + quickstart
-├── LICENSE                      # MIT
-├── .gitignore
-├── .env.example                 # variables d'env (sans secrets)
-├── docker-compose.yml           # 4 services : ollama, chroma, api, ui
-├── Dockerfile                   # image unique API + UI (multi-stage)
-├── pyproject.toml               # deps + tool config (ruff, pytest)
-├── requirements.txt             # lock des versions
-│
-├── data/
-│   ├── raw/
-│   │   ├── cmapss/              # NASA CMAPSS brut (4 sous-datasets)
-│   │   └── pdf/                 # 5-10 PDF techniques
-│   ├── processed/
-│   │   ├── chunks.jsonl         # chunks nettoyés (id, text, source, metadata)
-│   │   └── eval_dataset.jsonl   # Q&R pour RAGAS
-│   └── README.md                # provenance + licence des data
-│
-├── src/
-│   ├── __init__.py
-│   ├── config.py                # settings (pydantic-settings, .env)
-│   ├── ingestion/
-│   │   ├── __init__.py
-│   │   ├── pdf_loader.py        # PyMuPDF → chunks
-│   │   ├── cmapss_loader.py     # NASA → DataFrame + métadata
-│   │   └── chunker.py           # stratégie de chunking (recursive, overlap)
-│   ├── rag/
-│   │   ├── __init__.py
-│   │   ├── embeddings.py        # wrapper Ollama embeddings
-│   │   ├── vectorstore.py       # wrapper ChromaDB (persist, search)
-│   │   ├── retriever.py         # hybrid search (BM25 + dense)
-│   │   ├── chain.py             # chaîne LangChain (retrieval → prompt → LLM)
-│   │   ├── agent.py             # agent avec tools (SQL Python sur CMAPSS)
-│   │   └── prompts/
-│   │       ├── system_fr.txt    # system prompt FR (industrial expert)
-│   │       ├── system_en.txt    # system prompt EN
-│   │       └── qa_template.py   # template LangChain
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── main.py              # FastAPI app
-│   │   ├── routes/
-│   │   │   ├── query.py         # POST /query
-│   │   │   ├── ingest.py        # POST /ingest (rebuild index)
-│   │   │   └── eval.py          # POST /eval (lance RAGAS)
-│   │   └── schemas.py           # Pydantic models (Query, Response, Eval)
-│   ├── ui/
-│   │   └── streamlit_app.py     # chat interface + sidebar (sources, scores)
-│   ├── eval/
-│   │   ├── __init__.py
-│   │   ├── dataset.py           # génère eval_dataset.jsonl depuis CMAPSS
-│   │   └── ragas_runner.py      # lance RAGAS, exporte métriques
-│   └── utils/
-│       ├── __init__.py
-│       ├── logger.py            # loguru config (JSON structurés)
-│       └── timing.py            # décorateur pour mesurer latence
-│
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py              # fixtures (client FastAPI, sample chunks)
-│   ├── test_ingestion.py        # PDF loader, chunker, CMAPSS loader
-│   ├── test_rag_chain.py        # chaîne RAG (assertion sur réponse type)
-│   ├── test_api.py              # endpoints /query /ingest /eval
-│   ├── test_eval.py             # RAGAS metrics > seuil minimum
-│   └── fixtures/
-│       └── sample_doc.pdf       # 1 PDF test pour pytest
-│
-├── scripts/
-│   ├── 01_setup_ollama.sh       # pull Mistral + nomic-embed
-│   ├── 02_ingest.sh             # lance ingestion complète
-│   ├── 03_run_eval.sh           # lance RAGAS et exporte rapport
-│   └── 99_clean.sh              # reset complet (volumes Docker)
-│
-├── reports/                     # snapshots d'évaluation RAGAS
-│   ├── eval_2026-07-20.json     # scores baseline
-│   └── eval_2026-07-27.json     # scores après tuning
-│
-├── docs/
-│   ├── architecture.md          # archi détaillée + diagrammes Mermaid
-│   ├── evaluation.md            # méthodologie RAGAS + résultats
-│   ├── pitch_entrevue.md        # script 90 sec + démo live
-│   └── screenshots/             # PNG de l'UI et des résultats
-│
-└── .github/
-    └── workflows/
-        ├── ci.yml               # pytest + ruff sur PR
-        └── docker-publish.yml   # build & push image DockerHub (optionnel)
-```
-
-**Total :** ~30 fichiers Python, ~10 fichiers de config/docs, 4 services Docker. **C'est dense mais pas énorme — chaque fichier a un rôle clair.**
+### Ressources mesurées (M5 Pro)
+- Modèles téléchargés : Qwen2.5-7B (4-bit) + bge-small ≈ 5 Go, ~2 min
+- Ingestion complète (10 122 chunks depuis CMAPSS + 7 PDF) : ~3 min
+- Une requête RAG complète (retrieve + rerank + generate) : 3-9 sec
+- Cache HF local après nettoyage (Mistral + mauvais repo embed purgés) : 5,7 Go
 
 ---
 
-## 5. Roadmap weekend par weekend
+## 4. Ce qui est implémenté (arborescence réelle)
 
-### 🗓 W1 — Setup + Ingestion (≈ 8-10 h)
-
-**Samedi matin (4h)**
-- [ ] Créer repo GitHub `PDUCLOS/industrial-knowledge-copilot` (public, MIT)
-- [ ] Setup local : `pyenv install 3.12`, `venv`, `pip install -r requirements.txt`
-- [ ] Premier `docker-compose.yml` avec 4 services qui démarrent (Ollama + Chroma + API + UI)
-- [ ] `ollama pull mistral:7b-instruct-q4_K_M` et `ollama pull nomic-embed-text`
-- [ ] Test : `curl http://localhost:11434/api/tags` → 2 modèles listés
-
-**Samedi après-midi (4h)**
-- [ ] Télécharger NASA CMAPSS (4 sous-datasets + readme.txt)
-- [ ] `src/ingestion/cmapss_loader.py` : parse les .txt → pandas DataFrame avec colonnes (unit, cycle, op1-3, sensor1-21)
-- [ ] `src/ingestion/pdf_loader.py` : PyMuPDF → texte par page
-- [ ] `src/ingestion/chunker.py` : recursive chunking 500 tokens, overlap 50
-
-**Dimanche (3h)**
-- [ ] `scripts/02_ingest.sh` : pipeline complet (loaders → chunker → embeddings → ChromaDB)
-- [ ] Vérif : compter les chunks ingérés, sample de 5 chunks dans `data/processed/chunks.jsonl`
-- [ ] Test retrieval brut (CLI Python) : top-5 chunks sur 3 questions manuelles
-- [ ] Premier commit propre sur `main`
-
-**Livrable W1 :** ingestion qui marche, ChromaDB peuplé (~500-2000 chunks), retrieval top-k fonctionnel.
+Structure conforme au plan initial — voir [`README.md`](README.md#project-layout) pour le détail à jour.
+Points clés vérifiés en session :
+- `src/rag/chain.py` — chain LCEL (prompt → LLM → str), retrieval fait en amont pour exposer les sources
+- `src/rag/retriever.py` — hybride BM25+dense avec RRF, over-fetch réel avant reranking
+- `src/rag/agent.py` — agent ReAct + tool `query_cmapss` (DSL fermé, pas d'exécution de code)
+- `src/rag/llm.py` — wrapper MLX/LangChain, singleton class-level (modèle chargé une fois)
+- `src/ingestion/pipeline.py` — CMAPSS + 7 PDF → 10 122 chunks → ChromaDB
+- `tests/` — 21 tests unitaires verts (parser DSL, chunking, reranker, ingestion)
 
 ---
 
-### 🗓 W2 — Chaîne RAG + API (≈ 8-10 h)
+## 5. Roadmap — statut réel
 
-**Samedi matin (4h)**
-- [ ] `src/rag/embeddings.py` : wrapper OllamaEmbeddings (nomic-embed-text)
-- [ ] `src/rag/vectorstore.py` : wrapper Chroma (similarity_search, persist)
-- [ ] `src/rag/chain.py` : chaîne LangChain (retriever → prompt → LLM → output parser)
-- [ ] `src/rag/prompts/system_fr.txt` : system prompt (rôle : expert maintenance industrielle)
+### 🗓 W0-W4 — ✅ tous livrés
 
-**Samedi après-midi (4h)**
-- [ ] `src/api/main.py` : FastAPI app + CORS
-- [ ] `src/api/routes/query.py` : `POST /query {"question": "..."} → {"answer": "...", "sources": [...], "scores": [...]}`
-- [ ] `src/api/schemas.py` : Pydantic models
-- [ ] Test manuel : `curl -X POST http://localhost:8000/query -d '{"question": "Quelle est la température optimale du turbofan ?"}'`
+Tout le scope initial (setup, ingestion, chaîne RAG + API, UI Streamlit, évaluation RAGAS,
+hybrid search + reranking) est **implémenté et commité**. Historique complet dans `git log`.
 
-**Dimanche (3h)**
-- [ ] Tests pytest : `test_rag_chain.py` (assertion sur format réponse), `test_api.py` (endpoint smoke)
-- [ ] Premier `src/rag/agent.py` : agent LangChain avec 1 tool Python (`query_cmapss`) → l'agent peut interroger les données CMAPSS via du code Python généré
-- [ ] Commit propre
+### 🗓 Session du 2026-07-15 — audit + vérification end-to-end
 
-**Livrable W2 :** API FastAPI qui répond à des questions sur CMAPSS via RAG + agent, 5-10 tests pytest verts.
+Ce qui n'avait **jamais été vérifié en conditions réelles** avant cette session (le `.venv`
+était vide, aucune dépendance installée, `make setup` n'avait jamais réussi) :
 
----
+- [x] Résolution complète de la chaîne de dépendances (`requirements.txt` n'était pas installable tel quel)
+- [x] `make setup` → succès sur Python 3.12 / Apple Silicon
+- [x] `make chroma-up`, `make pull-models`, `make ingest` → 10 122 chunks indexés
+- [x] Requête RAG réelle bout-en-bout (retrieval hybride + reranking + génération Mistral) → réponse correcte, sourcée
+- [x] Agent ReAct exécuté avec le vrai LLM (infrastructure validée, limite de fiabilité identifiée — voir §8)
+- [x] 21/21 tests unitaires verts
 
-### 🗓 W3 — UI Streamlit + Évaluation RAGAS (≈ 8-10 h)
-
-**Samedi matin (4h)**
-- [ ] `src/ui/streamlit_app.py` : chat interface (input box, historique, streaming response)
-- [ ] Sidebar : afficher les sources (chunks retrieved) + scores cosine
-- [ ] Mode "toggle" : RAG pur / Agent avec tools
-- [ ] Test manuel : 10 questions types, vérifier que l'UI répond en < 20 sec
-
-**Samedi après-midi (4h)**
-- [ ] `src/eval/dataset.py` : génère 20-30 Q&R depuis CMAPSS (questions sur RUL, capteurs, conditions opérationnelles)
-- [ ] `src/eval/ragas_runner.py` : lance RAGAS, calcule faithfulness, answer_relevancy, context_precision, context_recall
-- [ ] `scripts/03_run_eval.sh` + export JSON dans `reports/`
-- [ ] **Premier baseline RAGAS** → noter les scores (objectif : faithfulness > 0.7, relevancy > 0.7)
-
-**Dimanche (3h)**
-- [ ] README.md complet : pitch + archi diagram (Mermaid) + quickstart (3 commandes)
-- [ ] `docs/architecture.md` : détails techniques
-- [ ] `docs/evaluation.md` : protocole + résultats baseline
-- [ ] Screenshots de l'UI Streamlit dans `docs/screenshots/`
-- [ ] Commit propre
-
-**Livrable W3 :** démo end-to-end qui marche, baseline RAGAS documenté, README pro.
+**Livrable de cette session :** preuve empirique que le pipeline marche, pas seulement "les tests passent".
 
 ---
 
-### 🗓 W4 — Polish + Tuning + Push final (≈ 6-8 h)
+## 6. Definition of Done — statut
 
-**Samedi (4h)**
-- [ ] Tuning des scores RAGAS :
-  - Ajuster le system prompt (plus direct, citer les sources)
-  - Hybrid search (BM25 + dense via Reciprocal Rank Fusion)
-  - Reranking avec cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`)
-  - Recalculer RAGAS, viser +0.1 sur chaque métrique
-- [ ] Logs structurés loguru (latence, nombre de chunks retrieved, score moyen)
-- [ ] Endpoint `/eval` exposé dans l'API
+| Critère | Statut |
+|---|---|
+| Repo avec README pro (archi diagram + quickstart) | ✅ fait |
+| `make setup && make chroma-up && make ingest` → pipeline complet en < 10 min | ✅ vérifié réellement |
+| Question type "Combien de moteurs dans FD001 ?" → réponse correcte, sourcée | ✅ vérifié réellement |
+| Sources affichées (chunks + score + méthode de retrieval) | ✅ |
+| Dataset d'évaluation (30 Q&R déterministes) | ✅ généré (`make eval-dataset`) |
+| RAGAS baseline chiffrée | ⏳ **pas encore lancé** — `make eval` reste à exécuter pour avoir de vrais chiffres (ceux du README sont des placeholders visés, pas mesurés) |
+| Tests pytest verts | ✅ 21/21 (hors tests marqués `integration`, qui nécessitent Chroma+modèles vivants) |
+| Repo public GitHub | ⏳ à créer/pousser — décision à prendre par Patrice |
+| Pitch entretien rédigé | ✅ `docs/pitch_entrevue.md` |
 
-**Dimanche (3h)**
-- [ ] GitHub Actions : CI pytest + ruff
-- [ ] `docs/pitch_entrevue.md` : script 90 sec + checklist démo live
-- [ ] Vidéo/GIF démo 30 sec
-- [ ] Tag Git `v1.0.0` + release notes
-- [ ] **Push final** : repo public, README, screenshots, vidéo
-- [ ] Mise à jour CV (`cv.md`) : ajout du projet dans "Projets" / "Atouts différenciants"
-- [ ] Mise à jour LinkedIn : section "Featured" + "Projets" → lien repo
-
-**Livrable W4 :** projet public et propre, évaluable en entretien avec démo live.
+**Prochaine étape concrète pour être "démo-ready" :** lancer `make eval` pour avoir un vrai
+baseline RAGAS chiffré (actuellement le README affiche des objectifs, pas des mesures).
 
 ---
 
-## 6. Critères d'acceptation (Definition of Done)
+## 7. Bilan technique — bugs trouvés et fixés (2026-07-15)
 
-Le projet est "livrable" en entretien SI :
+Argument de poids pour l'entretien : la chaîne de dépendances n'avait **jamais** tourné
+avant cette session. Diagnostic et fix, dans l'ordre où ils sont apparus :
 
-- [ ] Repo public GitHub avec README pro (archi diagram + quickstart)
-- [ ] `git clone && docker-compose up` → 4 services tournent en < 5 min
-- [ ] Question type "Quelle est la RUL moyenne du turbofan en cycle 150 ?" → réponse correcte en < 20 sec
-- [ ] Sources affichées (top-3 chunks + score cosine)
-- [ ] Au moins 20 questions dans `eval_dataset.jsonl`
-- [ ] RAGAS : faithfulness > 0.7, answer_relevancy > 0.7
-- [ ] Tests pytest verts (CI GitHub Actions)
-- [ ] Demo live fonctionne (capture vidéo 30 sec)
-- [ ] Pitch 90 sec rodé (dans `docs/pitch_entrevue.md`)
+**Logique applicative**
+1. `chain.py` — import manquant (`settings`), crash à l'import du module
+2. `chain.py` — double retrieval + mauvais type passé au chain LCEL (dict au lieu de string)
+3. `retriever.py` — reranker jamais déclenché (over-fetch absent malgré le docstring qui le promettait)
+4. `agent.py` — validation incohérente des capteurs (`KeyError` non catché sur sensor invalide)
+5. `agent.py` — tool multi-arguments incompatible avec le format ReAct single-input → réécrit en DSL string
+6. `agent.py` — bug caché introduit par le fix #5 : `subset=` en double dans les kwargs → `TypeError`
 
----
+**Dépendances (`requirements.txt` jamais installable tel quel)**
+7. `mlx==0.24.0` — version retirée de PyPI
+8. `langchain-hub` — mauvais nom de package (le vrai est `langchainhub`)
+9. `langchain-chroma` — dépendance jamais utilisée dans le code, mais forçait `chromadb<0.7.0` → conflit `tokenizers` insoluble avec `transformers==4.47.1`. Supprimée (le code parle à Chroma en HTTP direct).
+10. `numpy==2.1.3` — incompatible avec `langchain-chroma` (résolu par la suppression du #9)
+11. `rank-bm25` — dépendance implicite jamais pinnée
 
-## 7. Métriques de succès (à tracker)
+**Configuration & Makefile**
+12. `Makefile` — `MLX_MODEL_REPO`/`MLX_EMBED_REPO` référencés mais jamais définis → téléchargement vide
+13. `config.py` — `mlx_embed_repo` pointait vers un repo MLX-quantisé incompatible avec le chargeur `sentence-transformers` réellement utilisé
 
-| Métrique | Baseline W3 | Objectif W4 | Comment mesurer |
-|----------|-------------|-------------|-----------------|
-| Faithfulness RAGAS | ~0.5 | **> 0.75** | `ragas_runner.py` |
-| Answer relevancy | ~0.6 | **> 0.75** | `ragas_runner.py` |
-| Context precision | ~0.5 | **> 0.70** | `ragas_runner.py` |
-| Latence query (CPU M-series) | ~15 sec | **< 10 sec** | loguru timing decorator |
-| Latence query (GPU MPS) | ~5 sec | **< 5 sec** | idem |
-| % questions répondues correctement | 60% | **> 80%** | eval manuelle 20 questions |
-| Tests pytest | 5 tests | **> 15 tests** | CI |
-| Coverage | 40% | **> 60%** | pytest-cov |
+**Runtime (visibles seulement en exécutant pour de vrai)**
+14. `pipeline.py` — `readme.txt` NASA non-UTF-8 (cp1252), crash à l'ingestion
+15. `pipeline.py` — `chunk_id` PDF sans numéro de page → collisions entre pages, rejet ChromaDB
+16. `llm.py` — état singleton (`_model`/`_tokenizer`/`_lock`) mal déclaré pour pydantic v2 → `Lock` non copiable + tokenizer jamais réellement chargé
+17. `llm.py` — template de chat Mistral n'accepte pas de rôle "system" séparé → fusion dans le premier tour "user"
+18. `llm.py` — `_stream()` retournait le mauvais type (`ChatGeneration` au lieu de `ChatGenerationChunk`), cassait l'agent (qui streame en interne)
+19. `agent.py` — `early_stopping_method="generate"` retiré des versions récentes de LangChain
+20. `eval/ragas_runner.py` — métrique `answer_relevancy` mappée vers un attribut RAGAS inexistant
 
----
-
-## 8. Plan d'évaluation (RAGAS)
-
-### Dataset d'évaluation (20-30 Q&R générées)
-
-Format JSONL :
-```json
-{"question": "Quelle est la température moyenne du capteur 11 en cycle 100 ?", "ground_truth": "La température moyenne est de X°C"}
-{"question": "Quel est le RUL estimé pour l'unité 5 au cycle 150 ?", "ground_truth": "Environ 80 cycles restants"}
-```
-
-**Stratégie de génération :**
-- 10 questions factuelles sur CMAPSS (stats simples, conditions opérationnelles)
-- 10 questions de raisonnement (corrélation entre capteurs, dégradation)
-- 5 questions multi-hop (croiser plusieurs capteurs/cycles)
-- 5 questions pièges (hors scope → vérifier que l'agent dit "je ne sais pas")
-
-### Métriques RAGAS
-
-| Métrique | Signification | Objectif |
-|----------|--------------|----------|
-| **Faithfulness** | La réponse est-elle fidèle au contexte retrieved ? | > 0.75 |
-| **Answer relevancy** | La réponse est-elle pertinente pour la question ? | > 0.75 |
-| **Context precision** | Les chunks retrieved sont-ils les bons ? | > 0.70 |
-| **Context recall** | A-t-on récupéré tous les chunks nécessaires ? | > 0.65 |
+**Conclusion :** le badge "CI passing" et les scores RAGAS du README étaient aspirationnels,
+pas mesurés. C'est maintenant corrigé et vérifié empiriquement — mais ça vaut la peine
+d'être raconté en entretien : ça illustre la différence entre "le code compile" et "le
+système marche", qui est exactement ce qu'un recruteur IA/MLOps veut voir.
 
 ---
 
-## 9. Plan de documentation
+## 8. Résolu — l'agent ReAct et le choix du modèle
 
-### README.md (300 lignes max)
-1. **Hero banner** : titre + tagline + archi diagram + GIF démo
-2. **Pitch 1 paragraphe** : qui, quoi, pourquoi
-3. **Quickstart** : `git clone && docker-compose up && open localhost:8501`
-4. **Architecture** : diagramme Mermaid + tableau des services
-5. **Stack** : versions pinning
-6. **Démo** : 5 questions type + captures d'écran
-7. **Évaluation RAGAS** : tableau des scores + lien vers `docs/evaluation.md`
-8. **Roadmap** : statut actuel + TODO
-9. **Auteur** : lien LinkedIn + CV
+**Constat initial :** avec Mistral-7B-Instruct-v0.3 (4-bit) et le prompt ReAct générique
+(`hwchase17/react`, zéro exemple), l'agent n'invoquait jamais correctement l'outil
+`query_cmapss` — 0/5 sur un harnais de 5 questions quantitatives CMAPSS. Deux causes
+racines dans le code, pas seulement le modèle :
 
-### docs/architecture.md
-- Diagrammes Mermaid (composants + séquence query)
-- Décisions techniques (pourquoi Ollama vs OpenAI, Chroma vs Qdrant…)
+1. **`llm.py` ignorait silencieusement `stop`** — `mlx_lm.generate()`/`stream_generate()`
+   n'ont pas de support natif de séquences d'arrêt, et le paramètre `stop` (utilisé par
+   `AgentExecutor` pour couper la génération juste après `Action Input:`) n'était jamais
+   transmis. Le modèle générait donc sa propre Observation/Final Answer hallucinée dans
+   la même completion, sans jamais laisser l'exécuteur appeler le vrai outil. **Fixé** :
+   troncature manuelle à la première séquence d'arrêt (`_truncate_at_stop`), en streaming
+   comme en génération complète.
+2. **`AgentExecutor` n'avait pas `return_intermediate_steps=True`** — même quand l'outil
+   était réellement invoqué, `run()` ne pouvait pas le voir (le dict de résultat n'exposait
+   pas `intermediate_steps`), donnant l'illusion que rien ne fonctionnait jamais. **Fixé.**
 
-### docs/evaluation.md
-- Méthodologie RAGAS
-- Tableau baseline vs v1
-- Analyse des erreurs (5 plus mauvais résultats + pourquoi)
+Après ces deux fix + un prompt few-shot (2 exemples concrets Thought→Action→Action
+Input→Observation), l'agent a commencé à véritablement invoquer l'outil, mais
+Mistral-7B-Instruct-v0.3 enroulait souvent le nom de l'outil en backticks markdown
+(`` `query_cmapss` ``), cassant le matching exact de LangChain (`is not a valid tool`),
+et pouvait boucler jusqu'à la limite d'itérations.
 
-### docs/pitch_entrevue.md
-- Script 90 sec (à apprendre par cœur)
-- Checklist démo live (5 questions prêtes)
-- 3 questions pièges recruteur + réponses
+**A/B test mesuré** (même harnais, mêmes 5 questions, avant/après uniquement le modèle) :
 
----
+| Modèle | Taille/quant. | Tool invoqué proprement | Réponse correcte |
+|---|---|---|---|
+| Mistral-7B-Instruct-v0.3 | 4-bit | 2/5 | 1/3 |
+| **Qwen2.5-7B-Instruct** | 4-bit (même empreinte) | **5/5** | **2-3/3** |
 
-## 10. Ce que je peux faire vs ce que tu fais
+**Décision : Qwen2.5-7B-Instruct-4bit retenu comme LLM par défaut** (`config.py`,
+`.env.example`, README, docs mis à jour). Même taille, même RAM, aucune régression
+mesurée sur le RAG pur (`RAGChain.query()` reste correct et sourcé). Le narratif
+entretien : le modèle a été choisi par mesure empirique sur un harnais reproductible,
+pas par préférence — et deux vrais bugs de code (stop-sequences, `return_intermediate_steps`)
+ont été corrigés avant même de comparer les modèles, ce qui évite de masquer un bug
+derrière un changement de modèle.
 
-| Tâche | Qui | Pourquoi |
-|-------|-----|----------|
-| Squelette repo + arbo | **Moi** | Boilerplate rapide |
-| Code Python (chain, API, UI, eval) | **Moi** | Mon terrain |
-| Tests pytest | **Moi** | Discipline code |
-| Tuning RAGAS | **Moi + toi** | Décisions prompt = ton vécu métier |
-| Décision data source (CMAPSS vs autre) | **Toi** | Impact narrative CV |
-| Récupération docs PDF industriels | **Toi** | Possible seulement si tu as accès (Michaud) |
-| GitHub commits (attribution Patrice seul) | **Moi** | Convention 2026-06-30 (user.md) |
-| Mise à jour CV + LinkedIn après | **Toi** | Ton image perso |
-| Pitch entretien | **Toi** | Tu le fais vivre |
-
----
-
-## 11. Risques identifiés
-
-| Risque | Impact | Mitigation |
-|--------|--------|------------|
-| Ollama pas dispo / pas rapide sur Mac | Latence > 30 sec | Fallback Mistral API payante (0.2€/1k tokens) ou modèle plus petit (Phi-3 mini) |
-| Qualité RAG insuffisante sur CMAPSS | RAGAS baseline < 0.5 | Tuning prompt + chunking + reranking. Si toujours < 0.5, pivoter Option B (PDF industriels) |
-| NASA CMAPSS = data connue des recruteurs | "C'est pas original" | Ajouter 1 cas d'usage PDF industriels (même 2-3 PDF) pour montrer multi-source |
-| Agent avec tool calling instable | Hallucinations de code | Limiter à 1 tool simple, valider output, fallback "réponse sans tool" |
-| Temps > 4 weekends | Fatigue | Couper W4 (polish) et publier en v0.9 "MVP qui marche" |
+**Limite restante (acceptée, pas bloquante) :** sur la question la plus dure du harnais
+(multi-étapes, l'agent doit se corriger après un premier essai raté), le taux de succès
+varie encore d'une exécution à l'autre (~run-to-run variance, temp=0.1). C'est documenté
+plutôt que masqué — cohérent avec le risque "Agent avec tool calling instable" déjà
+anticipé dans le plan initial, mitigé par le DSL fermé (jamais d'exécution de code
+arbitraire, messages d'erreur propres sur toute entrée invalide).
 
 ---
 
-## 12. Décisions à prendre avant de démarrer
+## 9. Plan d'action — qui fait quoi
 
-J'ai besoin que tu tranches sur 2-3 points pour qu'on attaque lundi :
+| # | Action | Owner | Statut |
+|---|---|---|---|
+| 1 | `make eval` — baseline RAGAS chiffré avec Qwen2.5-7B + juge/embeddings 100% locaux (pas OpenAI, voir §11 bug #21) | Moi | ⏳ en cours |
+| 2 | Mettre à jour README (tableau métriques) avec les vrais chiffres RAGAS | Moi | ⏳ après #1 |
+| 3 | Purge du modèle Mistral (cache HF, ~3,8 Go) + repo embed MLX inutilisé (~19 Mo) | Moi | ✅ fait |
+| 4 | Nettoyer toutes les mentions "Mistral" dans le code/docs (README, .env.example, architecture.md, pipeline.md incl. section EU AI Act, pitch_entrevue.md) | Moi | ✅ fait |
+| 5 | Screenshots UI Streamlit + captation démo courte pour `docs/screenshots/` | **Patrice** (nécessite lancer `make api && make ui` et interagir avec le navigateur) | ⏳ à faire |
+| 6 | Créer le repo GitHub public `PDUCLOS/industrial-knowledge-copilot` | **Patrice** (compte GitHub personnel) | ⏳ à décider |
+| 7 | Premier push (`git push`) | **Patrice** (ou moi sur confirmation explicite une fois le repo créé) | ⏳ bloqué par #6 |
+| 8 | Mise à jour CV / LinkedIn | **Patrice** (image perso) | ⏳ après #6/#7 |
+| 9 | Roder le pitch 90 sec + les 3 questions pièges (`docs/pitch_entrevue.md`) | **Patrice** | ⏳ contenu prêt, reste la pratique orale |
 
-1. **Cas d'usage :** Option A (CMAPSS maintenance), B (PDF industriels), ou C (assistant RH générique) ?
-2. **Repo GitHub :** `industrial-knowledge-copilot`, `b2b-rag-copilot`, autre nom ?
-3. **LLM :** Ollama local confirmé (gratuit) ou OpenAI API malgré coût (~5-10€ pour le projet) ?
-4. **Niveau de polish attendu :** "v1 propre et public" (W3 + W4 complets) ou "MVP qui marche en 2 weekends" (W1 + W2 + UI minimal) ?
+**Ce que je ne fais pas sans confirmation explicite :** `git commit` (rien n'est commité à ce stade malgré tous les fixes), `git push`, création de compte/repo GitHub, actions sur LinkedIn.
 
 ---
 
-**Prochaine étape :** dès que tu valides les 4 points ci-dessus, je crée le repo + le squelette + les 4 services Docker qui démarrent, et on lance W1.
+## 10. Décisions déjà tranchées
+
+| Décision | Choix retenu |
+|---|---|
+| Cas d'usage | Option A — CMAPSS + PDF Schaeffler/SKF |
+| LLM | **Qwen2.5-7B-Instruct**, MLX 4-bit, 100% local — retenu après A/B mesuré contre Mistral-7B-Instruct-v0.3 sur la fiabilité de l'agent (voir §8) |
+| Repo GitHub | `industrial-knowledge-copilot` (nom confirmé dans README, push à faire) |
+| Niveau de polish | Build complet (pas de MVP réduit) — RAG hybride + reranking + agent + eval RAGAS tous livrés |
+
+---
+
+## 11. Bugs #21+ — trouvés après le premier passage (session continuée)
+
+En plus des 20 bugs du §7 :
+
+21. **`eval/ragas_runner.py` — RAGAS utilisait implicitement l'API OpenAI** (`evaluate()` appelé
+    sans `llm=`/`embeddings=`) pour les métriques faithfulness/answer_relevancy/etc., qui
+    nécessitent un LLM juge. Sans `OPENAI_API_KEY`, `make eval` aurait crashé — et même
+    configuré, ça aurait contredit le pitch "100% local, no API key". **Fixé** : `evaluate()`
+    reçoit maintenant `llm=chain.llm` (notre Qwen2.5 local) et `embeddings=LangChainEmbedder(chain.embedder)`
+    (nouvel adapter dans `src/rag/embeddings.py` qui fait le pont entre notre `Embedder`
+    maison et l'ABC `langchain_core.embeddings.Embeddings` qu'exige RAGAS).
+22. **`llm.py` — fallback système/utilisateur hardcodé pour le format Mistral** ne
+    profitait pas du rôle "system" natif que Qwen (ChatML) supporte. **Fixé** : essai du
+    rôle system natif d'abord, repli sur la fusion dans le premier tour "user" uniquement
+    si le chat template le rejette (`TemplateError`) — adaptatif, marche pour les deux
+    familles de modèles sans hypothèse figée sur laquelle est active.
+
+**Total : 22 bugs réels trouvés et corrigés**, dont 6 découverts uniquement en poussant
+le système jusqu'à une vraie réponse générée (pas visibles par lecture de code ni par
+les tests unitaires seuls). C'est l'argument central du bilan technique du projet : la
+différence entre "ça compile, les tests passent" et "je l'ai fait tourner et halluciner,
+puis corrigé jusqu'à ce que ça marche vraiment".

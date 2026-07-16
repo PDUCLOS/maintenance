@@ -60,6 +60,16 @@ data/raw/pdf/*.pdf
 data/processed/chunks.jsonl
 data/processed/eval_dataset.jsonl
 
+# Data corpus additionnel (datasets bruts CWRU, Paderborn, MFPT, etc. — 45 Go)
+data/datasets/
+data/docs/
+# Exception: l'inventaire textuel reste tracké
+!data/CORPUS_COLLECTE.md
+
+# Backup files (macOS)
+.*.bkp
+*.bak
+
 # Chroma
 chroma_data/
 chroma_db/

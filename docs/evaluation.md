@@ -71,7 +71,9 @@ When baseline < target:
 3. **Hybrid search** — add BM25 to dense retrieval (RRF)
 4. **Reranking** — add `cross-encoder/ms-marco-MiniLM-L-6-v2` on top-k
 5. **Embedding model** — try `bge-large` instead of `bge-small`
-6. **LLM** — try `Mistral-7B-Instruct-v0.3` (newer) or `Llama-3-8B-Instruct`
+6. **LLM** — currently `Qwen2.5-7B-Instruct` (chosen over `Mistral-7B-Instruct-v0.3`
+   after an A/B test on agent tool-calling reliability, see PLAN.md §8); if scores
+   plateau, try `Qwen2.5-14B-Instruct` or `Llama-3-8B-Instruct`
 
 Each change re-runs `make eval`. The snapshot diff is the tuning
 evidence we put in the README and in the interview pitch.
