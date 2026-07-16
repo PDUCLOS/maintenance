@@ -32,7 +32,7 @@ chromadb==0.6.3        # >=0.6.0 drops the tokenizers<=0.20.3 upper bound
 
 # --- RAG evaluation ---------------------------------------------------------
 # RAGAS v0.2 — the de facto standard for RAG evaluation.
-ragas==0.2.10
+ragas==0.4.3
 datasets==3.2.0
 
 # --- Data processing --------------------------------------------------------
