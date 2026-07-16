@@ -13,13 +13,13 @@
         <mxCell id="dfDqTBevyG8d33AHCCKP-2" edge="1" parent="1" source="pdf-catalog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="load-cm" value="">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="pdf-catalog" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="PDF catalogues&#xa;(Schaeffler, SKF, NTN-SNR)&#xa;~5 000 pages" vertex="1">
+        <mxCell id="pdf-catalog" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="13 PDF catalogues&#xa;(Schaeffler/FAG, SKF, NTN-SNR, GGB)&#xa;5 105 pages / 178 Mo" vertex="1">
           <mxGeometry height="100" width="160" x="80" y="140" as="geometry" />
         </mxCell>
-        <mxCell id="pdf" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="Technical PDFs&#xa;(Schaeffler, SKF, …)" vertex="1">
+        <mxCell id="pdf" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="13 PDF catalogues&#xa;(Schaeffler/FAG, SKF, NTN-SNR, GGB)&#xa;5 105 pages / 178 Mo" vertex="1">
           <mxGeometry height="100" width="160" x="280" y="140" as="geometry" />
         </mxCell>
-        <mxCell id="readme" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" value="readme.txt +&#xa;Damage Propagation&#xa;Modeling.pdf" vertex="1">
+        <mxCell id="readme" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" value="(none — CMAPSS retired in July 2026)&#xa;PDF catalogues only" vertex="1">
           <mxGeometry height="100" width="180" x="500" y="140" as="geometry" />
         </mxCell>
         <mxCell id="lane-ingest" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1f5e1;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=14" value="1. Ingestion (one-shot per rebuild) — src/ingestion/" vertex="1">
@@ -34,7 +34,7 @@
         <mxCell id="chunker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="chunker.py&#xa;recursive split&#xa;500 tok / 50 overlap" vertex="1">
           <mxGeometry height="80" width="160" x="500" y="350" as="geometry" />
         </mxCell>
-        <mxCell id="embed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="Embedder&#xa;bge-small (4-bit, MPS)&#xa;Metal direct" vertex="1">
+        <mxCell id="embed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="Embedder&#xa;bge-m3 (1024-dim)&#xa;Metal / MPS" vertex="1">
           <mxGeometry height="80" width="160" x="720" y="350" as="geometry" />
         </mxCell>
         <mxCell id="chroma-write" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="Chroma upsert&#xa;HTTP :8001" vertex="1">
@@ -58,7 +58,7 @@
         <mxCell id="retriever" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="HybridRetriever&#xa;RRF(dense, BM25)" vertex="1">
           <mxGeometry height="60" width="160" x="720" y="560" as="geometry" />
         </mxCell>
-        <mxCell id="llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="MLXChatModel&#xa;Mistral 7B (4-bit)&#xa;Metal / Neural Engine" vertex="1">
+        <mxCell id="llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="MLXChatModel&#xa;Qwen2.5-7B-Instruct (4-bit)&#xa;Metal / Neural Engine" vertex="1">
           <mxGeometry height="80" width="160" x="940" y="600" as="geometry" />
         </mxCell>
         <mxCell id="lane-eval" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;fontStyle=1;fontSize=14" value="3. Evaluation (per release) — src/eval/" vertex="1">
@@ -280,7 +280,7 @@
             <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s4" edge="1" parent="1" source="ll-chain" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-emb" value="4. embed([question]) → qv (384-dim, ~50ms on M-series)">
+        <mxCell id="s4" edge="1" parent="1" source="ll-chain" style="endArrow=classic;html=1;strokeColor=#000000" target="ll-emb" value="4. embed([question]) → qv (1024-dim, ~50ms on M-series)">
           <mxGeometry relative="1" as="geometry">
             <mxPoint y="-5" as="offset" />
           </mxGeometry>
@@ -295,7 +295,7 @@
             <mxPoint y="-5" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="s6b" edge="1" parent="1" source="ll-ret" style="endArrow=classic;html=1;strokeColor=#6c8ebf;dashed=1" value="5b. BM25: in-mem scan (~5ms for &lt; 5k chunks)">
+        <mxCell id="s6b" edge="1" parent="1" source="ll-ret" style="endArrow=classic;html=1;strokeColor=#6c8ebf;dashed=1" value="5b. BM25: in-mem scan (~30ms for ~11k chunks, first query only)">
           <mxGeometry relative="1" as="geometry">
             <mxPoint y="-5" as="offset" />
           </mxGeometry>
@@ -349,10 +349,10 @@
         <mxCell id="venv" value="Python 3.12 venv (.venv/)&#xa;src/ + tests/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="140" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="mlx-llm-box" value="MLX LLM&#xa;Mistral 7B (4-bit)&#xa;Metal direct" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+        <mxCell id="mlx-llm-box" value="MLX LLM&#xa;Qwen2.5-7B-Instruct (4-bit)&#xa;Metal direct" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="240" width="200" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="mlx-emb-box" value="MPS Embedder&#xa;bge-small (4-bit)&#xa;sentence-transformers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+        <mxCell id="mlx-emb-box" value="MPS Embedder&#xa;bge-m3 (1024-dim)&#xa;sentence-transformers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="360" width="200" height="80" as="geometry" />
         </mxCell>
         <mxCell id="uvicorn" value="Uvicorn&#xa;FastAPI :8000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
@@ -361,7 +361,7 @@
         <mxCell id="streamlit" value="Streamlit&#xa;:8501" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="1">
           <mxGeometry x="80" y="580" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="hf-cache" value="HuggingFace cache&#xa;~/.cache/huggingface/hub/&#xa;~5 GB (Mistral + bge)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
+        <mxCell id="hf-cache" value="HuggingFace cache&#xa;~/.cache/huggingface/hub/&#xa;~9 GB (Qwen2.5-7B + bge-m3)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="500" y="140" width="220" height="100" as="geometry" />
         </mxCell>
         <mxCell id="data-raw" value="data/raw/pdf/&#xa;Schaeffler + SKF + NTN-SNR" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
@@ -422,7 +422,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <!-- CPU/GPU note -->
-        <mxCell id="hw-note" value="Hardware budget (M5 Pro, 18 GB):&#xa;• OS: ~3 GB&#xa;• Mistral 7B 4-bit: ~5 GB&#xa;• bge-small + Chroma client: ~0.5 GB&#xa;• Uvicorn + Streamlit: ~0.5 GB&#xa;• Headroom: ~8 GB free" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left" vertex="1" parent="1">
+        <mxCell id="hw-note" value="Hardware budget (M5 Pro, 18 GB):&#xa;• OS: ~3 GB&#xa;• Qwen2.5-7B 4-bit: ~5 GB&#xa;• bge-m3 + Chroma client: ~1 GB&#xa;• Uvicorn + Streamlit: ~0.5 GB&#xa;• Headroom: ~7 GB free" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left" vertex="1" parent="1">
           <mxGeometry x="40" y="820" width="1060" height="120" as="geometry" />
         </mxCell>
       </root>
