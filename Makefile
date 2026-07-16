@@ -10,10 +10,10 @@
 #
 # Typical first run:
 #   make setup            # create venv, install deps
-#   make pull-models      # download Qwen2.5-7B-Instruct + bge-m3 (one-time, ~5 GB)
-#   make data             # download NASA CMAPSS (requires NASA PCoE account)
+#   make pull-models      # download Qwen2.5-7B + bge-m3 (~9 GB, one time)
+#   # Add PDFs to data/raw/pdf/ (Schaeffler / SKF / NTN-SNR catalogues)
 #   make chroma-up        # start ChromaDB
-#   make ingest           # build the vector index
+#   make ingest           # chunk + embed PDFs into the vector index
 #   make api              # start the API on :8000
 #   make ui               # start the Streamlit UI on :8501
 #   make eval             # run RAGAS evaluation, snapshot scores
@@ -104,44 +104,16 @@ preflight: ## Verify the host is Apple Silicon (MLX will not work otherwise)
 
 # ----- Models ---------------------------------------------------------------
 .PHONY: pull-models
-pull-models: ## Download Qwen2.5-7B-Instruct (MLX) + bge-small embeddings into HF cache
+pull-models: ## Download Qwen2.5-7B-Instruct (MLX) + bge-m3 embeddings into HF cache
 	@echo ">> Downloading MLX models into HuggingFace cache..."
 	@echo "   Target LLM:    $(MLX_MODEL_REPO)"
 	@echo "   Target embed:  $(MLX_EMBED_REPO)"
-	@echo "   This is a one-time download of ~5 GB. Be patient."
+	@echo "   This is a one-time download of ~9 GB. Be patient."
 	@if [ "$(IS_APPLE_SILICON)" != "1" ]; then \
 	    echo "   ERROR: MLX is Apple-Silicon only. Aborting."; exit 1; \
 	fi
 	$(VENV_BIN)/python -c "from huggingface_hub import snapshot_download; snapshot_download('$(MLX_MODEL_REPO)'); snapshot_download('$(MLX_EMBED_REPO)')"
 	@echo ">> Models downloaded."
-
-# ----- Data -----------------------------------------------------------------
-# NASA CMAPSS is now hosted in open access on data.nasa.gov (no PCoE account
-# required as of 2026). The PCoE page still exists but its direct download
-# was retired; data.nasa.gov is the canonical mirror.
-CMAPSS_URL := https://data.nasa.gov/docs/legacy/CMAPSSData.zip
-CMAPSS_ZIP := data/raw/cmapss/CMAPSSData.zip
-
-.PHONY: data
-data: ## Download NASA CMAPSS dataset (direct from data.nasa.gov, no account needed)
-	@echo ">> Downloading NASA CMAPSS from data.nasa.gov..."
-	@echo "   URL:  $(CMAPSS_URL)"
-	@echo "   Size: ~12 MB compressed, ~45 MB uncompressed"
-	@mkdir -p data/raw/cmapss
-	@if [ ! -f $(CMAPSS_ZIP) ]; then \
-	    curl -sL --fail -o $(CMAPSS_ZIP) $(CMAPSS_URL) || \
-	        (echo "   ERROR: download failed. Check your network or grab the file manually:" \
-	         "         $(CMAPSS_URL)"; exit 1); \
-	else \
-	    echo "   Already downloaded, skipping."; \
-	fi
-	@echo ">> Unzipping into data/raw/cmapss/..."
-	@unzip -o -q $(CMAPSS_ZIP) -d data/raw/cmapss/
-	@rm $(CMAPSS_ZIP)
-	@echo ">> Files now in data/raw/cmapss/:"
-	@ls data/raw/cmapss/ | sed 's/^/   - /'
-	@echo ""
-	@echo ">> Dataset ready. Next: 'make chroma-up && make ingest'."
 
 # ----- ChromaDB (Docker) ----------------------------------------------------
 .PHONY: chroma-up
@@ -175,7 +147,8 @@ chroma-reset: ## Delete persisted ChromaDB index (irreversible)
 .PHONY: ingest
 ingest: ## Run the full ingestion pipeline (loaders -> chunker -> embeddings -> Chroma)
 	@echo ">> Running ingestion pipeline..."
-	@test -d data/raw/cmapss || (echo "   ERROR: data/raw/cmapss/ missing. Run 'make data' first."; exit 1)
+	@test -d data/raw/pdf && ls data/raw/pdf/*.pdf >/dev/null 2>&1 || \
+	    (echo "   ERROR: no PDFs in data/raw/pdf/. Add Schaeffler / SKF / NTN-SNR catalogues first."; exit 1)
 	$(VENV_BIN)/python -m src.ingestion.pipeline
 
 .PHONY: api
@@ -197,7 +170,7 @@ eval: ## Run the RAGAS evaluation suite and snapshot the scores
 	@echo ">> Reports in reports/"
 
 .PHONY: eval-dataset
-eval-dataset: ## Regenerate the evaluation dataset from CMAPSS
+eval-dataset: ## Regenerate the evaluation dataset from the PDF catalogue
 	$(VENV_BIN)/python -m src.eval.dataset
 
 # ----- Collection management (manual — never auto-reset) --------------------
@@ -218,7 +191,7 @@ collection-new: ## Create a new empty collection (NAME=name, never overwrites)
 .PHONY: collection-drop
 collection-drop: ## Drop a collection (IRREVERSIBLE — requires confirm via stdin)
 	@echo "⚠️  About to drop $(NAME) (IRREVERSIBLE)."
-	@echo "   Source data (CMAPSS + PDFs) is NOT affected — you can rebuild with 'make ingest'."
+	@echo "   Source data (PDFs) is NOT affected — you can rebuild with 'make ingest'."
 	@read -p "   Type the collection name to confirm: " confirm && \
 	    [ "$$confirm" = "$(NAME)" ] && \
 	    $(VENV_BIN)/python scripts/manage_collection.py drop $(NAME) --yes || \

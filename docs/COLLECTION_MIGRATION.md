@@ -42,10 +42,10 @@ baseline anymore).
 ```bash
 # 1. Inspect current state
 python scripts/manage_collection.py list
-python scripts/manage_collection.py info cmapss_kb
+python scripts/manage_collection.py info bearings_kb
 
 # 2. Make sure you know what you're dropping
-make collection-drop NAME=cmapss_kb
+make collection-drop NAME=bearings_kb
 #   (Makefile will ask you to retype the name as a confirmation)
 
 # 3. Re-ingest
@@ -62,20 +62,20 @@ A/B comparison) or when you're not 100% sure the new model is better.
 python scripts/manage_collection.py list
 
 # 2. Create the new collection (alongside the old one)
-python scripts/manage_collection.py new cmapss_kb_bge_m3
+python scripts/manage_collection.py new bearings_kb_v2
 
 # 3. Point the project at the new collection
-python scripts/manage_collection.py use cmapss_kb_bge_m3
+python scripts/manage_collection.py use bearings_kb_v2
 #   (updates .env — restart make api / make ui to pick up)
 
 # 4. Re-ingest
 make ingest
 
 # 5. Verify the new collection has the right dim and count
-python scripts/manage_collection.py info cmapss_kb_bge_m3
+python scripts/manage_collection.py info bearings_kb_bge_m3
 
 # 6. (Optional) Once you're satisfied, drop the old one
-python scripts/manage_collection.py drop cmapss_kb --yes
+python scripts/manage_collection.py drop bearings_kb --yes
 #   OR keep it around for an A/B comparison
 ```
 
@@ -86,8 +86,8 @@ currently set as active in `settings.chroma_collection`. Switch to
 another collection first:
 
 ```bash
-python scripts/manage_collection.py use cmapss_kb_bge_m3
-python scripts/manage_collection.py drop cmapss_kb --yes   # now allowed
+python scripts/manage_collection.py use bearings_kb_v2
+python scripts/manage_collection.py drop bearings_kb --yes   # now allowed
 ```
 
 ## Estimating the rebuild cost

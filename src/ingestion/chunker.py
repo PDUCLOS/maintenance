@@ -44,7 +44,7 @@ class Chunk:
 
     chunk_id: str
     text: str
-    source: str  # e.g. "cmapss:FD001" or "pdf:skf_6205.pdf"
+    source: str  # e.g. "pdf:skf_6205.pdf"
     metadata: dict[str, str]
 
 

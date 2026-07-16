@@ -8,7 +8,6 @@ Two flavours of tests:
 The `addopts -m not integration` line in pyproject.toml means integration
 tests are SKIPPED by default. Run them explicitly with:
     make test-integration        # locally
-    pytest -m integration -v     # CI on a self-hosted runner
 """
 
 from __future__ import annotations
@@ -19,16 +18,12 @@ from src.config import settings
 
 
 def pytest_collection_modifyitems(config, items):
-    """Auto-skip integration tests on non-Apple-Silicon or when CMAPSS is missing."""
+    """Auto-skip integration tests on non-Apple-Silicon or when PDFs are missing."""
     skip_msilicon = pytest.mark.skip(reason="Apple Silicon required (MLX)")
-    skip_cmapss = pytest.mark.skip(reason="NASA CMAPSS data not found in data/raw/cmapss/")
+    skip_pdfs = pytest.mark.skip(reason="No PDFs found in data/raw/pdf/")
     for item in items:
         if "integration" in item.keywords:
             if not settings.is_apple_silicon():
                 item.add_marker(skip_msilicon)
-            try:
-                from src.ingestion.cmapss_loader import assert_cmapss_present
-
-                assert_cmapss_present()
-            except FileNotFoundError:
-                item.add_marker(skip_cmapss)
+            if not settings.pdf_dir.is_dir() or not any(settings.pdf_dir.glob("*.pdf")):
+                item.add_marker(skip_pdfs)

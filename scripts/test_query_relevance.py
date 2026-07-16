@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Smoke test for the RAG chain — relevance + jargon hygiene.
 
-Sends 5 representative questions to the running API on :8000, prints the
-answer, and checks two invariants:
+Sends representative questions to the running API on :8000 and checks
+two invariants on each answer:
 
-  1. **Relevance**: the answer must contain a number, a unit, or a clear
-     refusal (e.g. "I don't know") — not a non-sequitur.
+  1. **Relevance**: the answer must contain a number, a unit, a bearing
+     model reference, or a clear refusal (e.g. "I don't know") — not a
+     non-sequitur.
   2. **Jargon hygiene**: the answer must NOT contain the words "chunk",
      "retrieval", "retrieved", "embedding", "vector", "RAG", "passage",
      "extrait" (or the related developer terms). The end user is a
      maintenance engineer, not a developer.
+
+The questions cover: factual load rating, lubrication guidance,
+mounting procedure, diagnostic, mirror language (FR↔EN), and the
+out-of-scope refusal. Translation works as a side effect of the
+bilingual mirror system prompt.
 
 Usage:
     .venv/bin/python scripts/test_query_relevance.py
@@ -21,7 +27,6 @@ Exit code 0 if all checks pass, 1 otherwise.
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 import time
@@ -29,30 +34,36 @@ from typing import Any
 
 import httpx
 
-# Test questions. Mix of factual CMAPSS, technical PDF, and out-of-scope.
+# Test questions. Mix of factual, technical, mirror (FR↔EN), and out-of-scope.
 QUESTIONS = [
     {
-        "id": "cmapss_count",
-        "q": "Combien de moteurs dans le dataset FD001 ?",
-        "expect_any": ["100", "cent"],
+        "id": "load_rating_en",
+        "q": "What is the basic dynamic load rating (C) of a bearing?",
+        "expect_any": ["load", "rating", "C"],
         "expect_no": [],
     },
     {
-        "id": "cmapss_trend",
-        "q": "Le capteur sensor_11 augmente ou diminue au cours du temps dans FD001 ?",
-        "expect_any": [],
+        "id": "lubrication_fr",
+        "q": "Comment choisir une graisse pour un roulement ?",
+        "expect_any": ["graisse", "lubrification", "température", "vitesse"],
         "expect_no": [],
     },
     {
-        "id": "pdf_bearing",
-        "q": "What is the basic dynamic load rating of a deep groove ball bearing?",
-        "expect_any": [],
+        "id": "mounting_en",
+        "q": "What is the recommended procedure to mount a deep groove ball bearing?",
+        "expect_any": ["mount", "fit", "clean", "shaft"],
+        "expect_no": [],
+    },
+    {
+        "id": "diagnosis_fr",
+        "q": "Quels sont les modes de défaillance courants d'un roulement à billes ?",
+        "expect_any": ["fatigue", "usure", "contamination", "lubrification"],
         "expect_no": [],
     },
     {
         "id": "mirror_en",
-        "q": "How many sensors are in the CMAPSS dataset?",
-        "expect_any": ["21"],
+        "q": "What is a rolling bearing used for?",
+        "expect_any": ["load", "shaft", "rotation", "support", "reduce"],
         "expect_no": [],
     },
     {
@@ -163,7 +174,7 @@ def main() -> int:
 
     n_pass = sum(1 for r in results if r.get("passed"))
     n_fail = len(results) - n_pass
-    print(f"════════════════════════════════════════════════════════════")
+    print("════════════════════════════════════════════════════════════")
     print(f"  {n_pass} / {len(results)} passed  ({n_fail} failed)")
     if n_fail:
         print()

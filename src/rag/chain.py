@@ -13,7 +13,7 @@ Streaming is supported end-to-end (token by token) via .stream().
 
 Bilingual handling (FR/EN)
 ---------------------------
-The corpus is English (Schaeffler/SKF catalogues, NASA CMAPSS docs).
+The corpus is mostly English (Schaeffler/SKF bearing catalogues) with some French (NTN-SNR).
 The user may ask in French or English. We use **mirror response**:
 the LLM answers in the same language as the question, while keeping
 the source citations in their original language. The system prompt

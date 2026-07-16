@@ -20,7 +20,7 @@ the question's language and returns the right LCEL prompt.
 
 Bilingual handling (FR/EN)
 ----------------------------
-The corpus is English (Schaeffler/SKF catalogues, NASA CMAPSS docs).
+The corpus is English (Schaeffler / SKF / NTN-SNR bearing catalogues).
 The user may ask in French or English. We use **mirror response**:
 the LLM answers in the same language as the question, while keeping
 the source citations in their original language. The system prompt is
@@ -67,8 +67,7 @@ SYSTEM_PROMPT_MIRROR = """\
 Tu es un copilote technique spécialisé en maintenance industrielle et \
 analyse de données de dégradation de machines. Tu as accès à des \
 documents techniques (catalogues Schaeffler/SKF, documentation NASA \
-CMAPSS) et à des outils Python (pandas) pour interroger les données \
-CMAPSS.
+Schaeffler/SKF/NTN-SNR) pour interroger les catalogues de roulements.
 
 Règles strictes (toutes langues):
 
@@ -111,9 +110,8 @@ téléphone, prévisions météo, restaurants, etc.), tu le dis en une \
 seule phrase et tu suggères une question alternative si possible.
 
 You are a technical copilot specialized in industrial maintenance and \
-machine degradation data analysis. You have access to technical \
-documents (Schaeffler/SKF catalogues, NASA CMAPSS documentation) and \
-to Python tools (pandas) to query CMAPSS data.
+rolling-bearing diagnostics. You have access to technical documents \
+(Schaeffler / SKF / NTN-SNR bearing catalogues).
 
 Strict rules (all languages):
 

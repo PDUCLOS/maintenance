@@ -1,7 +1,7 @@
 """Language detection and bilingual handling.
 
 The project's corpus is mostly English (Schaeffler + SKF catalogues,
-NASA CMAPSS readme.txt) but the user may ask questions in French or
+the catalogues) but the user may ask questions in French or
 English. The RAG chain must:
 
 1. **Detect the language of the question** automatically.

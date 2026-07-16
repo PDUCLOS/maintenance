@@ -1,17 +1,20 @@
-"""Generate the evaluation dataset (Q&A pairs) from CMAPSS.
+"""Generate the evaluation dataset (Q&A pairs) from the PDF catalogue.
 
-The dataset is generated from the actual training data so ground-truth
+The dataset is generated from the actual PDF pages so ground-truth
 answers are deterministic and reproducible. Categories:
 
-    10 factual         — single-stat questions (mean, max, count)
-    10 reasoning       — correlation / trend questions
-     5 multi-hop       — cross-sensor / cross-cycle questions
-     5 out-of-scope    — "I don't know" traps (questions CMAPSS can't answer)
+    10 factual         — single-stat questions on a specific page
+     5 reasoning       — "why" / "how" questions answered by the page
+     5 retrieval       — exact-citation questions (filename + page)
+     5 out-of-scope    — "I don't know" traps
 
 Output: data/processed/eval_dataset.jsonl
 
-Ground truth is computed from the data itself (not hand-written), so it
-stays accurate if we re-run the dataset generation after a CMAPSS update.
+The ground truth is the **first non-empty paragraph of a randomly
+selected page** (trimmed to <= 280 chars to keep the eval dataset
+lean). This is reproducible: pick the same seed, you get the same
+questions and the same page-derived answers. The RAGAS judge then
+checks whether the LLM's answer is faithful to that paragraph.
 """
 
 from __future__ import annotations
@@ -21,151 +24,150 @@ import random
 from pathlib import Path
 
 from src.config import settings
-from src.ingestion.cmapss_loader import SUBSETS, assert_cmapss_present, load_train
+from src.ingestion.pdf_loader import load_all_pdfs
 from src.utils.logger import logger
 from src.utils.timing import timed
 
 # Out-of-scope questions — the copilot MUST say "I don't know" for these.
+# These cover common adversarial / off-topic queries: weather, prices,
+# restaurants, capitals — the same property (out of scope) is independent
+# of the specific corpus (bearing catalogues).
 OUT_OF_SCOPE_QUESTIONS: list[str] = [
-    "What is the price of a new turbofan engine?",
-    "Who manufactures the CMAPSS dataset hardware?",
-    "Can you predict the exact date of the next engine failure?",
-    "What is the phone number of NASA support?",
-    "What is the best restaurant in Lyon?",
+    "What is the price of a new SKF Explorer bearing?",
     "What is the weather forecast for tomorrow in Paris?",
-    "Who won the last FIFA World Cup?",
+    "Can you predict the exact date of the next machine failure?",
+    "What is the phone number of SKF customer support?",
+    "What is the best restaurant in Lyon?",
     "What is the capital of Australia?",
+    "Who won the last FIFA World Cup?",
+    "What is the current price of Bitcoin?",
 ]
 
 OUT_OF_SCOPE_ANSWER = "I don't know from the available data."
 
+# Question templates per page. We pick one randomly per page to add
+# variety while keeping the Q&A grounded in the actual page content.
+QUESTION_TEMPLATES_FACTUAL = [
+    "What does this page say about {topic}?",
+    "Summarize the key technical specifications on this page.",
+    "What is the main topic of this page?",
+]
 
-def _sensor_means_by_subset() -> dict[str, dict[str, float]]:
-    """Pre-compute per-subset per-sensor means for faster dataset generation."""
-    means: dict[str, dict[str, float]] = {}
-    for subset in SUBSETS:
-        df = load_train(subset)
-        means[subset] = {
-            f"sensor_{i:02d}": float(df[f"sensor_{i:02d}"].mean()) for i in range(1, 22)
-        }
-    return means
+QUESTION_TEMPLATES_REASONING = [
+    "Why is {topic} important for bearing maintenance?",
+    "What problem does {topic} solve?",
+    "When should {topic} be applied?",
+]
+
+QUESTION_TEMPLATES_RETRIEVAL = [
+    "Which document discusses {topic}?",
+    "Where in the catalogue can I find information about {topic}?",
+]
+
+# We need a list of plausible topics so the questions read like real
+# queries (instead of placeholder "this page" wording). These are
+# general bearing-maintenance topics that appear across the catalogues.
+TOPICS = [
+    "lubrication",
+    "load rating",
+    "mounting",
+    "alignment",
+    "vibration",
+    "temperature limits",
+    "fatigue life",
+    "contamination",
+    "sealing",
+    "bearing clearance",
+    "noise diagnosis",
+    "grease selection",
+    "radial load",
+    "axial load",
+    "operating temperature",
+    "starting torque",
+    "static load",
+    "dynamic load",
+    "service life",
+    "failure modes",
+]
 
 
-def _sensor_trends_by_subset() -> dict[str, dict[str, str]]:
-    """Pre-compute per-subset per-sensor trend labels.
+def _first_meaningful_paragraph(text: str, max_chars: int = 280) -> str:
+    """Return the first non-empty paragraph of `text`, trimmed to max_chars.
 
-    Same definition as `src.ingestion.pipeline._dataframe_to_text`:
-    compare first 30% vs last 30% of max cycle.
+    Skips lines that are obviously headers / page numbers / TOC entries
+    (very short, or all caps, or all digits). Falls back to the first
+    200 chars if no good paragraph is found.
     """
-    trends: dict[str, dict[str, str]] = {}
-    for subset in SUBSETS:
-        df = load_train(subset)
-        max_cycle = int(df["time_cycles"].max())
-        cutoff = int(max_cycle * 0.3)
-        first_mask = df["time_cycles"] <= cutoff
-        last_mask = df["time_cycles"] > (max_cycle - cutoff)
-        sub_trends: dict[str, str] = {}
-        for i in range(1, 22):
-            col = f"sensor_{i:02d}"
-            first = df.loc[first_mask, col].mean()
-            last = df.loc[last_mask, col].mean()
-            if abs(last - first) < 1e-6:
-                sub_trends[col] = "stable"
-            elif last > first:
-                sub_trends[col] = "increases"
-            else:
-                sub_trends[col] = "decreases"
-        trends[subset] = sub_trends
-    return trends
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        # Skip headers, footers, page numbers, TOC entries
+        if len(line) < 30:
+            continue
+        if line.isupper():
+            continue
+        if line.replace(" ", "").isdigit():
+            continue
+        # Skip lines that are just a section number
+        if line.split(".")[0].isdigit() and len(line) < 50:
+            continue
+        return line[:max_chars]
+    return text[:200].strip()
 
 
-def _make_factual(rng: random.Random, means: dict[str, dict[str, float]]) -> list[dict]:
-    """10 factual questions: counts, means, max cycles per subset."""
+def _make_factual(rng: random.Random, pages: list[tuple[str, str]]) -> list[dict]:
+    """10 factual questions: pick 10 random pages, first paragraph = ground truth."""
     out: list[dict] = []
-    for subset in SUBSETS:
-        df = load_train(subset)
-        n_units = int(df["unit_nr"].nunique())
-        max_cycles = int(df["time_cycles"].max())
-        # 3 per subset = 12 total, then we trim to keep the category at 10
+    for source, paragraph in rng.sample(pages, k=min(10, len(pages))):
+        topic = rng.choice(TOPICS)
         out.append(
             {
-                "question": f"How many turbofan engines are in the {subset} training set?",
-                "ground_truth": f"{n_units} engines.",
+                "question": rng.choice(QUESTION_TEMPLATES_FACTUAL).format(topic=topic),
+                "ground_truth": paragraph,
                 "category": "factual",
+                "expected_source": source,
             }
         )
-        # pick a random sensor for the mean
-        sensor_id = rng.randint(1, 21)
-        col = f"sensor_{sensor_id:02d}"
-        m = means[subset][col]
+    return out
+
+
+def _make_reasoning(rng: random.Random, pages: list[tuple[str, str]]) -> list[dict]:
+    """5 reasoning questions."""
+    out: list[dict] = []
+    for source, paragraph in rng.sample(pages, k=min(5, len(pages))):
+        topic = rng.choice(TOPICS)
         out.append(
             {
-                "question": f"What is the mean of {col} across all cycles in {subset}?",
-                "ground_truth": f"{m:.2f}.",
-                "category": "factual",
+                "question": rng.choice(QUESTION_TEMPLATES_REASONING).format(topic=topic),
+                "ground_truth": paragraph,
+                "category": "reasoning",
+                "expected_source": source,
             }
         )
+    return out
+
+
+def _make_retrieval(rng: random.Random, pages: list[tuple[str, str]]) -> list[dict]:
+    """5 retrieval questions: which document discusses X?"""
+    out: list[dict] = []
+    for source, _paragraph in rng.sample(pages, k=min(5, len(pages))):
+        # extract the filename from the source (source format: "pdf:NAME.pdf:pN")
+        filename = source.split(":")[1] if ":" in source else source
+        topic = rng.choice(TOPICS)
         out.append(
             {
-                "question": f"What is the maximum number of cycles observed for any unit in {subset}?",
-                "ground_truth": f"{max_cycles} cycles.",
-                "category": "factual",
+                "question": rng.choice(QUESTION_TEMPLATES_RETRIEVAL).format(topic=topic),
+                "ground_truth": f"{filename} (page {source.split(':p')[-1]}).",
+                "category": "retrieval",
+                "expected_source": source,
             }
         )
-    # Trim to 10
-    return out[:10]
-
-
-def _make_reasoning(rng: random.Random, trends: dict[str, dict[str, str]]) -> list[dict]:
-    """10 reasoning questions: trend per sensor per subset."""
-    out: list[dict] = []
-    for subset in SUBSETS:
-        # 3 per subset = 12, trim to 10
-        for _ in range(3):
-            sensor_id = rng.randint(1, 21)
-            col = f"sensor_{sensor_id:02d}"
-            trend = trends[subset][col]
-            out.append(
-                {
-                    "question": (
-                        f"Does {col} tend to increase, decrease, or stay stable as the engine "
-                        f"degrades in {subset}?"
-                    ),
-                    "ground_truth": f"{trend}.",
-                    "category": "reasoning",
-                }
-            )
-    return out[:10]
-
-
-def _make_multi_hop(rng: random.Random) -> list[dict]:
-    """5 multi-hop questions: mean of one sensor at an exact cycle."""
-    out: list[dict] = []
-    for subset in SUBSETS:
-        df = load_train(subset)
-        # 2 per subset = 8, trim to 5
-        for _ in range(2):
-            sensor_id = rng.randint(1, 21)
-            col = f"sensor_{sensor_id:02d}"
-            cycle = rng.randint(50, 200)
-            sub = df[df["time_cycles"] == cycle]
-            if sub.empty:
-                gt = f"No data in {subset} at cycle {cycle}."
-            else:
-                gt = f"{sub[col].mean():.2f}."
-            out.append(
-                {
-                    "question": f"For {subset}, at cycle {cycle}, what is the mean of {col}?",
-                    "ground_truth": gt,
-                    "category": "multi_hop",
-                }
-            )
-    return out[:5]
+    return out
 
 
 def _make_out_of_scope() -> list[dict]:
     """5 out-of-scope questions: copilot must say 'I don't know'."""
-    # Use the first 5 of OUT_OF_SCOPE_QUESTIONS
     return [
         {
             "question": q,
@@ -183,19 +185,37 @@ def build() -> Path:
     Returns the path to the generated file.
     """
     settings.assert_apple_silicon()
-    assert_cmapss_present()
     out_path = settings.eval_dataset_file
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    rng = random.Random(42)  # deterministic
-    logger.info("Pre-computing per-sensor stats from CMAPSS data...")
-    means = _sensor_means_by_subset()
-    trends = _sensor_trends_by_subset()
+    # 1. Load every PDF page
+    pages_raw = load_all_pdfs()
+    if not pages_raw:
+        raise RuntimeError(
+            f"No PDF files found in {settings.pdf_dir}. "
+            "Add Schaeffler/SKF catalogues there, then re-run."
+        )
 
+    # 2. Extract first meaningful paragraph per page (we keep only pages
+    # that yielded a usable paragraph; the rest are skipped)
+    pages: list[tuple[str, str]] = []
+    for page in pages_raw:
+        source = f"pdf:{page.file_name}:p{page.page_number}"
+        para = _first_meaningful_paragraph(page.text)
+        if para and len(para) >= 30:
+            pages.append((source, para))
+
+    if len(pages) < 25:
+        raise RuntimeError(
+            f"Need at least 25 PDF pages with usable paragraphs, got {len(pages)}. "
+            "Add more PDF content or lower the category counts."
+        )
+
+    rng = random.Random(42)  # deterministic
     items: list[dict] = []
-    items.extend(_make_factual(rng, means))
-    items.extend(_make_reasoning(rng, trends))
-    items.extend(_make_multi_hop(rng))
+    items.extend(_make_factual(rng, pages))
+    items.extend(_make_reasoning(rng, pages))
+    items.extend(_make_retrieval(rng, pages))
     items.extend(_make_out_of_scope())
 
     with out_path.open("w", encoding="utf-8") as f:
@@ -212,6 +232,14 @@ def build() -> Path:
         n_by_cat,
     )
     return out_path
+
+
+__all__ = [
+    "OUT_OF_SCOPE_ANSWER",
+    "OUT_OF_SCOPE_QUESTIONS",
+    "TOPICS",
+    "build",
+]
 
 
 if __name__ == "__main__":

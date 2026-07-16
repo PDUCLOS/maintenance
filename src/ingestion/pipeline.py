@@ -1,14 +1,13 @@
 """Ingestion pipeline orchestrator.
 
-Runs the full load -> chunk -> embed -> persist flow:
+Runs the full load -> chunk -> embed -> persist flow for the PDF
+catalogue (Schaeffler + SKF):
 
-    1. Load CMAPSS readme.txt (text) and per-subset DataFrames
-    2. Load PDFs (if any) page by page
-    3. Serialize DataFrames to text (per-unit summaries, sensor stats)
-    4. Chunk everything with the recursive splitter
-    5. Embed with the MLX-backed sentence-transformers model (MPS)
-    6. Upsert into ChromaDB (collection from settings.chroma_collection)
-    7. Write a JSONL copy of the chunks to data/processed/chunks.jsonl
+    1. Load PDFs (if any) page by page
+    2. Chunk everything with the recursive splitter
+    3. Embed with the sentence-transformers model (MPS)
+    4. Upsert into ChromaDB (collection from settings.chroma_collection)
+    5. Write a JSONL copy of the chunks to data/processed/chunks.jsonl
 
 Usage:
     python -m src.ingestion.pipeline
@@ -17,16 +16,9 @@ Usage:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from src.config import settings
 from src.ingestion.chunker import build_chunks
-from src.ingestion.cmapss_loader import (
-    SUBSETS,
-    assert_cmapss_present,
-    discover_readme,
-    load_train,
-)
 from src.ingestion.pdf_loader import load_all_pdfs
 from src.rag.embeddings import Embedder
 from src.rag.vectorstore import VectorStore
@@ -34,41 +26,15 @@ from src.utils.logger import logger
 from src.utils.timing import timed
 
 
-def _read_text_any_encoding(path: Path) -> str:
-    """Read a text file, tolerating non-UTF-8 legacy encodings.
-
-    NASA's CMAPSS readme.txt ships with a handful of cp1252 characters
-    (e.g. em-dashes) despite being otherwise ASCII — plain UTF-8 decoding
-    fails on it.
-    """
-    raw = path.read_bytes()
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return raw.decode("cp1252")
-
-
 @timed
 def run() -> None:
     """Execute the full ingestion pipeline. Raises on any error."""
     settings.assert_apple_silicon()
-    assert_cmapss_present()
 
     # 1. Build the raw corpus as (text, source, metadata) tuples
     corpus: list[tuple[str, str, dict[str, str]]] = []
 
-    # 1a. CMAPSS readme
-    readme = discover_readme()
-    if readme:
-        corpus.append((_read_text_any_encoding(readme), "cmapss:readme", {"type": "doc"}))
-
-    # 1b. CMAPSS per-subset structured data (textualised)
-    for subset in SUBSETS:
-        df = load_train(subset)
-        text = _dataframe_to_text(df, subset)
-        corpus.append((text, f"cmapss:{subset}", {"type": "dataset", "subset": subset}))
-
-    # 1c. PDFs
+    # 1a. PDFs (Schaeffler + SKF catalogues)
     for page in load_all_pdfs():
         # Source must include the page number: build_chunks() derives
         # chunk_id from source + a per-source chunk index, so two pages
@@ -86,7 +52,13 @@ def run() -> None:
             )
         )
 
-    logger.info("Corpus: {} raw documents", len(corpus))
+    if not corpus:
+        raise RuntimeError(
+            f"No PDF files found in {settings.pdf_dir}. "
+            "Add Schaeffler/SKF catalogues there, then re-run."
+        )
+
+    logger.info("Corpus: {} raw documents (PDFs only)", len(corpus))
 
     # 2. Chunk
     chunks = build_chunks(corpus)
@@ -117,68 +89,7 @@ def run() -> None:
     logger.info("Vector store updated: collection={}", settings.chroma_collection)
 
 
-def _dataframe_to_text(df, subset: str) -> str:
-    """Render a CMAPSS DataFrame as a human-readable markdown text block.
-
-    Includes per-sensor statistics, operating conditions summary, fleet
-    size, and per-sensor trend (first 30% vs last 30% of max cycle).
-    The LLM will see this text when answering questions about the dataset.
-
-    Note: the trend uses the same definition as `src.eval.dataset` so the
-    ground-truth answers in the eval set stay consistent.
-    """
-    sensor_cols = [c for c in df.columns if c.startswith("sensor_")]
-    op_cols = [c for c in df.columns if c.startswith("op_setting_")]
-
-    n_units = int(df["unit_nr"].nunique())
-    cycles_per_unit = df.groupby("unit_nr")["time_cycles"].max()
-    max_cycle = int(df["time_cycles"].max())
-
-    lines: list[str] = [
-        f"# CMAPSS Subset {subset}",
-        "",
-        f"- Number of engines: {n_units}",
-        f"- Total cycles (all engines): {len(df):,}",
-        f"- Cycles per engine: min={int(cycles_per_unit.min())}, "
-        f"max={int(cycles_per_unit.max())}, mean={cycles_per_unit.mean():.1f}",
-        "",
-        "## Operating conditions (mean ± std)",
-    ]
-    for col in op_cols:
-        m, s = df[col].mean(), df[col].std()
-        lines.append(f"- {col}: {m:.4f} ± {s:.4f}")
-
-    lines.extend(["", "## Sensor statistics (mean ± std)"])
-    for col in sensor_cols:
-        m, s = df[col].mean(), df[col].std()
-        lines.append(f"- {col}: {m:.2f} ± {s:.2f}")
-
-    # Per-sensor trend: compare mean over the first 30% of max cycle vs
-    # the last 30% of max cycle. Stable, increase, or decrease.
-    lines.extend(
-        [
-            "",
-            "## Sensor trends (first 30% vs last 30% of max cycle)",
-        ]
-    )
-    cutoff = int(max_cycle * 0.3)
-    first_mask = df["time_cycles"] <= cutoff
-    last_mask = df["time_cycles"] > (max_cycle - cutoff)
-    for col in sensor_cols:
-        first_mean = df.loc[first_mask, col].mean()
-        last_mean = df.loc[last_mask, col].mean()
-        if abs(last_mean - first_mean) < 1e-6:
-            trend = "stable"
-        elif last_mean > first_mean:
-            trend = "increases"
-        else:
-            trend = "decreases"
-        lines.append(
-            f"- {col}: {trend} (first30_mean={first_mean:.2f}, last30_mean={last_mean:.2f})"
-        )
-
-    lines.append("")
-    return "\n".join(lines)
+__all__ = ["run"]
 
 
 if __name__ == "__main__":

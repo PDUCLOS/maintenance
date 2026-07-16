@@ -43,7 +43,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Industrial Knowledge Copilot",
-    description="Local RAG copilot for industrial maintenance (NASA CMAPSS + technical PDFs).",
+    description="Local RAG copilot for industrial maintenance (Schaeffler + SKF bearing catalogues).",
     version="0.1.0",
     lifespan=lifespan,
 )

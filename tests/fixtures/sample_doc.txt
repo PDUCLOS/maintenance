@@ -4,11 +4,12 @@ This is a placeholder text file used to test chunking and retrieval logic
 in CI without requiring a real PDF parser. Replace with a real PDF if you
 need layout-aware parsing tests.
 
-The turbofan engine is composed of:
-- a low-pressure compressor
-- a high-pressure compressor
-- a combustion chamber
-- a high-pressure turbine
-- a low-pressure turbine
+A rolling-element bearing is composed of:
+- an inner ring
+- an outer ring
+- a set of rolling elements (balls or rollers)
+- a cage (also called a retainer)
+- optionally, seals or shields
 
-The CMAPSS dataset provides run-to-failure sensor readings.
+Basic dynamic load rating (C) is the load under which a bearing achieves
+a rating life of one million revolutions. It is expressed in newtons.

@@ -1,6 +1,6 @@
 """Hybrid retriever: BM25 (lexical) + dense (embedding) fused with RRF.
 
-Why hybrid? The CMAPSS readme and technical PDFs are dense prose, but
+Why hybrid? Technical PDFs (bearing catalogues) are dense prose, but
 sensor names, unit IDs and column names are best matched lexically. Pure
 embedding retrieval misses "FD001" and exact sensor identifiers. BM25
 covers that, and Reciprocal Rank Fusion combines both rankings without

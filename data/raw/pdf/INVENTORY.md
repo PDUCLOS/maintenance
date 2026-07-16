@@ -85,7 +85,7 @@ commercial product, formal licensing would be required.
 
 ```bash
 # All-in-one (idempotent)
-make data    # already-existing NASA CMAPSS — runs first
+make chroma-up    # start ChromaDB
 # For PDFs, just keep the existing files or re-download manually with curl
 ```
 

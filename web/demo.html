@@ -75,14 +75,14 @@
         <aside class="demo-panel demo-sidebar">
             <h3>À propos</h3>
             <p style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 12px;">
-                <strong>Copilote RAG local</strong> pour la <strong>maintenance industrielle</strong>
-                — répond à des questions sur les <strong>données NASA CMAPSS</strong> (capteurs, durée de vie)
-                et les <strong>catalogues Schaeffler / SKF</strong> (4 343 pages).
+                <strong>Copilote RAG local</strong> pour la <strong>maintenance des roulements</strong>
+                — répond à des questions sur les <strong>catalogues Schaeffler, SKF et NTN-SNR</strong>
+                (~5 000 pages de documentation technique).
             </p>
             <p style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 12px;">
-                <strong style="color: var(--success);">✓ Il répond à :</strong> questions factuelles
-                (« combien de moteurs dans FD001 ? »), tendances de capteurs, calculs sur les
-                données structurées, questions sur les roulements / lubrification / montage.
+                <strong style="color: var(--success);">✓ Il répond à :</strong> capacité de charge
+                (C, C0, L10), lubrification, procédures de montage, diagnostic vibratoire,
+                modes de défaillance, limites de température.
             </p>
             <p style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 12px;">
                 <strong style="color: var(--warning);">✗ Il ne répond PAS à :</strong> questions
@@ -142,11 +142,10 @@
                 <div class="chat-empty">
                     <div>
                         <div style="font-size: 48px; margin-bottom: 16px;">💬</div>
-                        <h2>Pose une question sur la maintenance industrielle</h2>
+                        <h2>Pose une question sur la maintenance des roulements</h2>
                         <p class="muted" style="margin-top: 12px;">
-                            Le copilote cherche dans les données de capteurs NASA CMAPSS
-                            et dans 4 343 pages de catalogues Schaeffler/SKF, puis répond
-                            en citant ses sources.
+                            Le copilote cherche dans les ~5 000 pages de catalogues
+                            Schaeffler / SKF / NTN-SNR, puis répond en citant ses sources.
                         </p>
                         <p class="dim" style="margin-top: 16px; font-size: 12px;">
                             Astuce : utilise le <b>formulaire guidé</b> à gauche pour poser
@@ -192,85 +191,105 @@ const examplesEl = document.getElementById('examples');
 // Guided question form (mirrors src/rag/intents.py — keep in sync)
 // ===========================================================================
 
-const CMAPSS_SUBSETS = ['FD001', 'FD002', 'FD003', 'FD004'];
-const CMAPSS_SENSORS = Array.from({ length: 21 }, (_, i) => `sensor_${String(i + 1).padStart(2, '0')}`);
+const TOPICS = [
+    ['ball bearing load rating', 'Capacité de charge d\\'un roulement à billes'],
+    ['roller bearing load rating', 'Capacité de charge d\\'un roulement à rouleaux'],
+    ['fatigue life', 'Durée de vie en fatigue (L10)'],
+    ['static load', 'Charge statique (C0)'],
+    ['dynamic load', 'Charge dynamique (C)'],
+    ['lubrication grease', 'Graissage (graisse)'],
+    ['lubrication oil', 'Lubrification (huile)'],
+    ['re-lubrication interval', 'Intervalle de regraissage'],
+    ['mounting procedure', 'Procédure de montage'],
+    ['vibration monitoring', 'Surveillance vibratoire'],
+    ['temperature limits', 'Limites de température'],
+    ['failure modes', 'Modes de défaillance'],
+    ['contamination', 'Contamination'],
+    ['spalling', 'Écaillage'],
+];
+const DOCUMENT_OPTIONS = [
+    ['SKF', 'SKF'],
+    ['Schaeffler INA FAG', 'Schaeffler (INA / FAG)'],
+    ['NTN-SNR', 'NTN-SNR'],
+    ['any', 'N\\'importe lequel'],
+];
 
 const INTENTS = [
     {
-        key: 'cmapss_unit_count', icon: '🔢', category: 'CMAPSS — factual',
-        label: 'Combien de moteurs dans un subset ?',
-        description: "Nombre d'unités dans le training set du subset.",
-        question: 'How many turbofan engines are in the {subset} training set?',
-        fields: [{ name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' }],
+        key: 'load_basic_dynamic', icon: '⚙️', category: 'Capacité de charge',
+        label: 'Capacité de charge dynamique de base (C)',
+        description: 'Définition, mode de calcul, facteurs d\\'ajustement.',
+        question: 'What is the basic dynamic load rating (C) and how is it used to size a bearing?',
+        fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'ball bearing load rating' }],
     },
     {
-        key: 'cmapss_max_cycles', icon: '🔢', category: 'CMAPSS — factual',
-        label: 'Nombre max de cycles (par unité) dans un subset',
-        description: 'Durée de vie max enregistrée pour une unité du subset.',
-        question: 'What is the maximum number of cycles observed for any unit in {subset}?',
-        fields: [{ name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' }],
+        key: 'load_fatigue_life', icon: '📐', category: 'Capacité de charge',
+        label: 'Durée de vie en fatigue (L10)',
+        description: 'Formule L10 = (C/P)^p, facteurs correctifs.',
+        question: 'How is the rating life (L10) of a rolling bearing calculated?',
+        fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'fatigue life' }],
     },
     {
-        key: 'cmapss_sensor_mean', icon: '📊', category: 'CMAPSS — factual',
-        label: "Moyenne d'un capteur (tous cycles)",
-        description: "Moyenne arithmétique d'un capteur sur l'ensemble du subset.",
-        question: 'What is the mean of {sensor} across all cycles in {subset}?',
+        key: 'lubricant_selection', icon: '🛢️', category: 'Lubrification',
+        label: 'Choix du lubrifiant (graisse ou huile)',
+        description: 'Critères : température, vitesse, charge, environnement.',
+        question: 'How do I select a lubricant (grease or oil) for a {topic}?',
         fields: [
-            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
-            { name: 'sensor', label: 'Capteur (sensor_01 → sensor_21)', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_11' },
+            { name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'lubrication grease' },
+            { name: 'document', label: 'Source préférée', kind: 'select', options: DOCUMENT_OPTIONS, default: 'any' },
         ],
     },
     {
-        key: 'cmapss_sensor_trend', icon: '📈', category: 'CMAPSS — reasoning',
-        label: "Tendance d'un capteur (augmente / diminue / stable)",
-        description: "Le capteur monte, descend, ou reste stable avec l'usure ?",
-        question: 'Does {sensor} tend to increase, decrease, or stay stable as the engine degrades in {subset}?',
+        key: 're_lubrication_interval', icon: '⏱️', category: 'Lubrification',
+        label: 'Intervalle de regraissage',
+        description: 'Recommandations SKF / Schaeffler selon conditions.',
+        question: 'What is the recommended re-lubrication interval for a {topic}?',
+        fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 're-lubrication interval' }],
+    },
+    {
+        key: 'mounting_procedure', icon: '🔧', category: 'Montage',
+        label: 'Procédure de montage / démontage',
+        description: 'Outillage, chauffage, ajustements serrés / glissants.',
+        question: 'What is the recommended procedure to mount a {topic}?',
         fields: [
-            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
-            { name: 'sensor', label: 'Capteur', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_04' },
+            { name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'mounting procedure' },
+            { name: 'document', label: 'Source préférée', kind: 'select', options: DOCUMENT_OPTIONS, default: 'any' },
         ],
     },
     {
-        key: 'cmapss_sensor_at_cycle', icon: '🎯', category: 'CMAPSS — reasoning',
-        label: "Valeur moyenne d'un capteur à un cycle précis",
-        description: 'Moyenne du capteur parmi toutes les unités à ce cycle exact.',
-        question: 'For {subset}, at cycle {cycle}, what is the mean of {sensor}?',
-        fields: [
-            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
-            { name: 'sensor', label: 'Capteur', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_07' },
-            { name: 'cycle', label: 'Cycle exact (1-400)', kind: 'number', default: 150, min: 1, max: 400 },
-        ],
+        key: 'vibration_diagnosis', icon: '📈', category: 'Diagnostic',
+        label: 'Diagnostic vibratoire d\\'un roulement',
+        description: 'Fréquences caractéristiques, FFT, seuils de sévérité.',
+        question: 'How do I diagnose a bearing defect through vibration analysis?',
+        fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'vibration monitoring' }],
     },
     {
-        key: 'cmapss_mean_rul', icon: '🤖', category: 'CMAPSS — agent tool calling',
-        label: 'Mean RUL (Remaining Useful Life)',
-        description: "RUL moyen du subset (nécessite l'agent avec tool calling).",
-        question: 'What is the mean RUL in {subset}?',
-        fields: [{ name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' }],
+        key: 'temperature_limits', icon: '🌡️', category: 'Diagnostic',
+        label: 'Limites de température de fonctionnement',
+        description: 'Plage normale, alerte, alarme selon lubrifiant et type.',
+        question: 'What are the operating temperature limits for a {topic}?',
+        fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'temperature limits' }],
     },
     {
-        key: 'cmapss_min_max_sensor', icon: '🤖', category: 'CMAPSS — agent tool calling',
-        label: "Min et max d'un capteur",
-        description: "Plage de variation d'un capteur dans le subset.",
-        question: 'What is the minimum and maximum of {sensor} in {subset}?',
-        fields: [
-            { name: 'subset', label: 'Subset', kind: 'select', options: CMAPSS_SUBSETS, default: 'FD001' },
-            { name: 'sensor', label: 'Capteur', kind: 'select', options: CMAPSS_SENSORS, default: 'sensor_11' },
-        ],
+        key: 'failure_modes', icon: '💥', category: 'Modes de défaillance',
+        label: 'Modes de défaillance courants',
+        description: 'Fatigue, contamination, lubrification, faux-brinnelling, échauffement.',
+        question: 'What are the most common failure modes for a {topic}?',
+        fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'failure modes' }],
     },
     {
-        key: 'industrial_ask', icon: '📚', category: 'Industrial catalogue',
-        label: 'Question sur les catalogues Schaeffler / SKF',
-        description: 'Pose une question libre sur les roulements, montage, lubrification, etc.',
-        question: 'What does the documentation say about {topic}?',
+        key: 'free_question', icon: '📚', category: 'Question libre',
+        label: 'Question libre sur les catalogues',
+        description: 'Pose n\\'importe quelle question sur les roulements, lubrification, montage, etc.',
+        question: 'What does the catalogue documentation say about {topic}?',
         fields: [
             { name: 'topic', label: 'Sujet (en anglais de préférence)', kind: 'text',
-              default: 'ball bearing load rating', placeholder: "Ex: 'ball bearing load rating'" },
+              default: 'FAG self-aligning bearing', placeholder: "Ex: 'FAG self-aligning bearing'" },
         ],
     },
     {
-        key: 'out_of_scope', icon: '⚠️', category: 'Out of scope (test)',
-        label: "Test hors-scope (doit dire 'I don't know')",
+        key: 'out_of_scope', icon: '⚠️', category: 'Hors-scope (test)',
+        label: "Test hors-scope (doit dire 'I don\\'t know')",
         description: 'Vérifie que le copilot refuse poliment les questions non-pertinentes.',
         question: '{question}',
         fields: [
@@ -322,8 +341,8 @@ function renderIntentFields() {
             s.style.width = '100%';
             f.options.forEach(o => {
                 const opt = document.createElement('option');
-                opt.value = o;
-                opt.textContent = o;
+                opt.value = o[0];
+                opt.textContent = o[1];
                 s.appendChild(opt);
             });
             s.value = f.default;
@@ -384,11 +403,12 @@ document.getElementById('guided-generate').addEventListener('click', () => {
 // ===========================================================================
 
 const EXAMPLES = [
-    { cat: 'CMAPSS — factual', q: 'How many turbofan engines are in the FD001 training set?' },
-    { cat: 'CMAPSS — reasoning', q: 'Does sensor_04 tend to increase or decrease as the engine degrades in FD001?' },
-    { cat: 'CMAPSS — multi-hop', q: 'For FD001, at cycle 150, what is the mean of sensor_07?' },
-    { cat: 'Schaeffler/SKF', q: 'What is the basic dynamic load rating formula used by SKF for rolling bearings?' },
-    { cat: 'Out-of-scope', q: 'What is the phone number of NASA support?' },
+    { cat: 'Capacité de charge', q: 'What is the basic dynamic load rating (C) of a deep groove ball bearing?' },
+    { cat: 'Lubrification', q: 'How do I select a grease for a high-temperature application?' },
+    { cat: 'Montage', q: 'What is the recommended procedure to mount a self-aligning ball bearing?' },
+    { cat: 'Diagnostic', q: 'How do I diagnose a bearing defect through vibration analysis?' },
+    { cat: 'Défaillance', q: 'What are the most common failure modes for rolling bearings?' },
+    { cat: 'Hors-scope', q: 'What is the phone number of NASA support?' },
 ];
 
 EXAMPLES.forEach(ex => {

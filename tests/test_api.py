@@ -29,7 +29,7 @@ def test_query_endpoint():
     from src.api.main import app
 
     with TestClient(app) as client:
-        r = client.post("/query", json={"question": "What is CMAPSS?", "top_k": 3})
+        r = client.post("/query", json={"question": "What is a rolling bearing?", "top_k": 3})
         assert r.status_code == 200
         body = r.json()
         assert "answer" in body
