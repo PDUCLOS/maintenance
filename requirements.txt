@@ -28,7 +28,7 @@ langchainhub==0.1.20
 rank-bm25==0.2.2      # backs langchain_community.retrievers.BM25Retriever
 
 # --- Vector store -----------------------------------------------------------
-chromadb==0.6.3        # >=0.6.0 drops the tokenizers<=0.20.3 upper bound
+chromadb==1.5.9        # >=0.6.0 drops the tokenizers<=0.20.3 upper bound
 
 # --- RAG evaluation ---------------------------------------------------------
 # RAGAS v0.2 — the de facto standard for RAG evaluation.
