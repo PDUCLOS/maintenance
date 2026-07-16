@@ -29,6 +29,7 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from pydantic import ConfigDict
 
 from src.config import settings
 from src.utils.logger import logger
@@ -95,8 +96,9 @@ class MLXChatModel(BaseChatModel):
     temperature: float = settings.mlx_temperature
     top_p: float = settings.mlx_top_p
 
-    class Config:
-        arbitrary_types_allowed = True
+    # Pydantic v2 config (was `class Config: arbitrary_types_allowed = True`
+    # in v1 — deprecated since Pydantic 2.0, removed in 3.0).
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

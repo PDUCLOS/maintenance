@@ -105,6 +105,16 @@ class Settings(BaseSettings):
     reranker_enabled: bool = Field(default=True)
     reranker_model: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
 
+    # --- API behaviour ------------------------------------------------------
+    # Hard timeout for one /query request. If the LLM (or any other step)
+    # takes longer than this, the API returns 504 to the client. The LLM
+    # thread itself is NOT interrupted (Python can't safely do that from
+    # outside the thread); the next request may be slow because the LLM
+    # is still busy, but the API stays responsive.
+    # 60 s leaves headroom for: retrieval (~100 ms) + LLM generation
+    # (~2-5 s typical, can spike to ~30 s on big prompts or cold start).
+    query_timeout_seconds: int = Field(default=60, ge=5, le=600)
+
     # --- Logging ------------------------------------------------------------
     log_level: str = Field(default="INFO")
     log_format: str = Field(default="json", description="'json' or 'console'.")
