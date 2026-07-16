@@ -36,7 +36,7 @@ ragas==0.2.10
 datasets==3.2.0
 
 # --- Data processing --------------------------------------------------------
-pymupdf==1.25.1        # PDF parsing (faster than pypdf, better layout)
+pymupdf==1.28.0        # PDF parsing (faster than pypdf, better layout)
 pandas==2.2.3
 numpy==1.26.4            # <2.0.0 required by langchain-chroma==0.1.4
 tiktoken==0.8.0         # Token counting for chunking
