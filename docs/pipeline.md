@@ -444,10 +444,14 @@ monkeypatch + from-import = double-binding).
 **Context** : Les commits sont la signature publique du projet.
 
 **Decision** :
-- Pas de `Co-Authored-By: Mavis`
-- Pas de `🤖 Generated with Mavis`
+- Pas de `Co-Authored-By:` d'agent IA (quel qu'il soit)
+- Pas de footer `🤖 Generated with…`
 - Auteur : `Patrice Duclos <patrice@lyonflow.fr>`
 - Footer de commit : description du *pourquoi*, pas du *comment* (le diff le dit)
+- Idem pour les fichiers binaires : pas d'attribut `agent=` dans les XML/JSON/DrawIO. Vérifier avec :
+  ```bash
+  git grep -E 'agent="(Mavis|Mavis|Claude|Cursor|Copilot)"'
+  ```
 
 **Consequences** :
 - ✅ Le repo est lisible comme un projet 100 % humain
