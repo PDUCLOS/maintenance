@@ -34,16 +34,15 @@ _FR_HINTS: frozenset[str] = frozenset({
     "est", "sont", "était", "étaient", "fait", "faits", "peut", "peuvent",
     # common nouns / adjectives
     "roulement", "roulements", "moteur", "moteurs", "capteur", "capteurs",
-    "température", "pression", "vitesse", "durée", "combien", "nombre",
-    "moyenne", "moyen", "cycle", "cycles", "panne", "pannes", "panne",
-    "quel", "quelle", "quels", "quelles",
+    "température", "pression", "vitesse", "durée", "nombre",
+    "moyenne", "moyen", "cycle", "cycles", "panne", "pannes", "quels", "quelles",
 })
 
 _EN_HINTS: frozenset[str] = frozenset({
     # function words
     "the", "a", "an", "of", "in", "on", "at", "to", "for", "with", "without",
     "and", "or", "but", "so", "because", "if", "that", "what", "which", "who",
-    "how", "why", "when", "where", "this", "that", "these", "those",
+    "how", "why", "when", "where", "this", "these", "those",
     "my", "your", "his", "her", "its", "our", "their",
     "is", "are", "was", "were", "been", "be", "has", "have", "had",
     "do", "does", "did", "can", "could", "should", "would", "will",
@@ -51,7 +50,7 @@ _EN_HINTS: frozenset[str] = frozenset({
     "bearing", "bearings", "engine", "engines", "sensor", "sensors",
     "temperature", "pressure", "speed", "duration", "cycle", "cycles",
     "failure", "failures", "mean", "average", "median", "max", "min",
-    "how", "many", "much", "what", "which",
+    "many", "much",
 })
 
 

@@ -31,7 +31,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import Runnable, RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough
 
 from src.config import settings
 from src.rag.embeddings import Embedder
@@ -87,13 +87,17 @@ class RAGChain:
         cls._instance = None
 
     def _format_context(self, chunks: list[RetrievedChunk]) -> str:
-        """Render retrieved chunks as a single context string."""
+        """Render retrieved documents as a single context string."""
         if not chunks:
-            return "(no context retrieved — the knowledge base is empty or the question is out of scope)"
+            return "(no relevant source found — the knowledge base is empty or the question is out of scope)"
         lines = []
         for i, c in enumerate(chunks, start=1):
+            # Use neutral labels in the user-facing context so the LLM
+            # doesn't echo internal jargon ("retrieval", "chunk") in its
+            # answer. The metadata is preserved via the source label
+            # and a relevance score, both of which read naturally.
             lines.append(
-                f"[{i}] (source={c.source}, retrieval={c.retrieval_method}, score={c.score:.4f})\n{c.text}"
+                f"[{i}] (source: {c.source}, relevance: {c.score:.2f})\n{c.text}"
             )
         return "\n\n---\n\n".join(lines)
 
