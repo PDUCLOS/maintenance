@@ -55,6 +55,7 @@ requests==2.32.3
 # --- Observability ----------------------------------------------------------
 loguru==0.7.3
 rich==13.9.4
+tqdm==4.68.4     # progress bar for the 20-min bge-m3 ingest (also transitive via sentence-transformers)
 
 # --- Document generation (PROJECT_OVERVIEW.docx) ----------------------------
 python-docx==1.1.2   # scripts/generate_overview_docx.py

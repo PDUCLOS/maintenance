@@ -60,11 +60,17 @@ class Embedder:
         assert Embedder._model is not None
         if not texts:
             return []
+        # Show a tqdm progress bar for non-trivial batches (the bge-m3
+        # ingest takes ~20 min on M5 Pro without feedback — UX disaster).
+        # Below 50 texts the bar is noise.
+        show_bar = len(texts) > 50
+        if show_bar:
+            logger.info("Embedding {} chunks (~20 min on M5 Pro)...", len(texts))
         vectors = Embedder._model.encode(
             texts,
             convert_to_numpy=True,
             normalize_embeddings=True,  # cosine sim == dot product
-            show_progress_bar=False,
+            show_progress_bar=show_bar,
         )
         return vectors.tolist()
 
