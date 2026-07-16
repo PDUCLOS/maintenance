@@ -221,6 +221,7 @@ Rules:
 # QA template builders
 # ---------------------------------------------------------------------------
 
+
 def get_qa_template(language: str = "fr") -> ChatPromptTemplate:
     """Return the legacy per-language RAG QA prompt template.
 

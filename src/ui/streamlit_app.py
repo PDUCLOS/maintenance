@@ -213,18 +213,24 @@ with tab_chat:
                     labels = [lab for _, lab in f.options] or options
                     default_idx = options.index(f.default) if f.default in options else 0
                     field_values[f.name] = st.selectbox(
-                        f.label, options, index=default_idx,
-                        format_func=lambda v, lab=labels, o=options: lab[o.index(v)] if v in o else v,
+                        f.label,
+                        options,
+                        index=default_idx,
+                        format_func=lambda v, lab=labels, o=options: lab[o.index(v)]
+                        if v in o
+                        else v,
                         key=f"intent_{chosen_intent.key}_{f.name}",
                     )
                 elif f.kind == "number":
-                    field_values[f.name] = str(st.number_input(
-                        f.label,
-                        min_value=f.min_value or 1,
-                        max_value=f.max_value or 9999,
-                        value=int(f.default) if f.default else 100,
-                        key=f"intent_{chosen_intent.key}_{f.name}",
-                    ))
+                    field_values[f.name] = str(
+                        st.number_input(
+                            f.label,
+                            min_value=f.min_value or 1,
+                            max_value=f.max_value or 9999,
+                            value=int(f.default) if f.default else 100,
+                            key=f"intent_{chosen_intent.key}_{f.name}",
+                        )
+                    )
                 else:  # text
                     field_values[f.name] = st.text_input(
                         f.label,
@@ -268,7 +274,10 @@ with tab_chat:
 
     # Input (free-form chat). The guided-question form above can also
     # push a question via st.session_state.pending_question.
-    if prompt := (st.chat_input("Pose ta question…") or st.session_state.pop("pending_question_from_input", None)):
+    if prompt := (
+        st.chat_input("Pose ta question…")
+        or st.session_state.pop("pending_question_from_input", None)
+    ):
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         with st.chat_message("user"):
@@ -472,6 +481,8 @@ with tab_index:
             if stats and stats.get("sample_chunks"):
                 for chunk in stats["sample_chunks"]:
                     with st.expander(f"`{chunk['id']}`", expanded=False):
-                        st.caption(f"Source : `{chunk['source']}` · Métadonnées : `{chunk['metadata']}`")
+                        st.caption(
+                            f"Source : `{chunk['source']}` · Métadonnées : `{chunk['metadata']}`"
+                        )
                         text = chunk["text"]
                         st.text(text[:600] + ("…" if len(text) > 600 else ""))

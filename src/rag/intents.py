@@ -133,20 +133,13 @@ class Intent:
 
         Missing required fields raise ValueError with a clear message.
         """
-        missing = [
-            f.name for f in self.fields
-            if f.required and not values.get(f.name)
-        ]
+        missing = [f.name for f in self.fields if f.required and not values.get(f.name)]
         if missing:
-            raise ValueError(
-                f"Missing required field(s): {', '.join(missing)}"
-            )
+            raise ValueError(f"Missing required field(s): {', '.join(missing)}")
         try:
             return self.question_template.format(**values)
         except KeyError as e:
-            raise ValueError(
-                f"Missing value for placeholder {e!s} in question template"
-            ) from e
+            raise ValueError(f"Missing value for placeholder {e!s} in question template") from e
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +191,6 @@ INTENTS: tuple[Intent, ...] = (
         fields=(_TOPIC_FIELD,),
         question_template="How is the rating life (L10) of a rolling bearing calculated?",
     ),
-
     # --- LUBRICATION ---
     Intent(
         key="lubricant_selection",
@@ -218,7 +210,6 @@ INTENTS: tuple[Intent, ...] = (
         fields=(_TOPIC_FIELD,),
         question_template="What is the recommended re-lubrication interval for a {topic}?",
     ),
-
     # --- MOUNTING ---
     Intent(
         key="mounting_procedure",
@@ -229,7 +220,6 @@ INTENTS: tuple[Intent, ...] = (
         fields=(_TOPIC_FIELD, _DOC_FIELD),
         question_template="What is the recommended procedure to mount a {topic}?",
     ),
-
     # --- DIAGNOSIS ---
     Intent(
         key="vibration_diagnosis",
@@ -249,7 +239,6 @@ INTENTS: tuple[Intent, ...] = (
         fields=(_TOPIC_FIELD,),
         question_template="What are the operating temperature limits for a {topic}?",
     ),
-
     # --- FAILURE ---
     Intent(
         key="failure_modes",
@@ -260,7 +249,6 @@ INTENTS: tuple[Intent, ...] = (
         fields=(_TOPIC_FIELD,),
         question_template="What are the most common failure modes for a {topic}?",
     ),
-
     # --- FREE ---
     Intent(
         key="free_question",
@@ -278,7 +266,6 @@ INTENTS: tuple[Intent, ...] = (
         ),
         question_template="What does the catalogue documentation say about {topic}?",
     ),
-
     # --- OUT_OF_SCOPE (test) ---
     Intent(
         key="out_of_scope",

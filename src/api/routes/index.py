@@ -38,7 +38,9 @@ def stats(sample_limit: int = 5, source_scan_limit: int = 10000) -> IndexStatsRe
         SourceChunk(
             id=ids[i],
             text=documents[i] if i < len(documents) else "",
-            source=(metadatas[i] or {}).get("source", "unknown") if i < len(metadatas) else "unknown",
+            source=(metadatas[i] or {}).get("source", "unknown")
+            if i < len(metadatas)
+            else "unknown",
             score=0.0,
             metadata=metadatas[i] or {} if i < len(metadatas) else {},
         )

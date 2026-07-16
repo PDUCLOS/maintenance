@@ -96,9 +96,7 @@ class RAGChain:
             # doesn't echo internal jargon ("retrieval", "chunk") in its
             # answer. The metadata is preserved via the source label
             # and a relevance score, both of which read naturally.
-            lines.append(
-                f"[{i}] (source: {c.source}, relevance: {c.score:.2f})\n{c.text}"
-            )
+            lines.append(f"[{i}] (source: {c.source}, relevance: {c.score:.2f})\n{c.text}")
         return "\n\n---\n\n".join(lines)
 
     def _build_invoke(self, language: str):
@@ -123,7 +121,9 @@ class RAGChain:
         answer = chain.invoke({"context": context, "question": question})
         logger.info(
             "RAG query ok (lang={}, chunks={}, answer_len={})",
-            language, len(chunks), len(answer),
+            language,
+            len(chunks),
+            len(answer),
         )
         return RAGResponse(answer=answer, sources=chunks, language=language)
 
