@@ -65,6 +65,13 @@ app.include_router(ingest_route.router)
 app.include_router(eval_route.router)
 app.include_router(index_route.router)
 
+# API versioning — same handlers exposed under /v1/* (the documented
+# stable surface). The bare /query /ingest /eval /index paths remain
+# for backward compatibility and are aliases of /v1/*.
+# To deprecate a route: add a deprecation notice here and document in CHANGELOG.
+for route_module in (query_route, ingest_route, eval_route, index_route):
+    app.include_router(route_module.router, prefix="/v1")
+
 
 @app.get("/", tags=["meta"])
 def root() -> dict[str, str]:

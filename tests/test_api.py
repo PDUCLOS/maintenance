@@ -127,6 +127,58 @@ class TestQueryTimeout:
         monkeypatch.setattr(RAGChain, "get", real_get)
 
 
+
+    def test_v1_routes_are_registered(self):
+        """The /v1/* namespace must be registered alongside the
+        legacy bare paths (backward compat)."""
+        from fastapi.testclient import TestClient
+
+        from src.api.main import app
+
+        with TestClient(app) as client:
+            # /openapi.json lists all routes
+            r = client.get('/openapi.json')
+            assert r.status_code == 200
+            paths = r.json()['paths'].keys()
+            # /v1/* should be present
+            assert '/v1/query' in paths, f'missing /v1/query in {sorted(paths)}'
+            assert '/v1/ingest' in paths
+            assert '/v1/eval' in paths
+            # Bare paths should still be there (backward compat)
+            assert '/query' in paths
+            assert '/ingest' in paths
+
+    def test_v1_query_works_same_as_query(self, monkeypatch):
+        """A POST to /v1/query should behave the same as /query (same
+        handler, same response shape)."""
+        from fastapi.testclient import TestClient
+
+        from src.rag.chain import RAGChain
+
+        class FakeResponse:
+            def __init__(self):
+                self.answer = 'test answer'
+                self.sources = []
+                self.language = 'en'
+
+        real_get = RAGChain.get
+        monkeypatch.setattr(RAGChain, 'get', classmethod(lambda cls: type('FakeChain', (), {'query': staticmethod(lambda q, top_k=5: FakeResponse())})()))
+
+        from src.api.main import app
+        with TestClient(app) as client:
+            r1 = client.post('/query', json={'question': 'x', 'top_k': 3})
+            r2 = client.post('/v1/query', json={'question': 'x', 'top_k': 3})
+            assert r1.status_code == 200
+            assert r2.status_code == 200
+            # Same handler → same response shape, except for latency_ms
+            # which is timing-dependent. Compare on the stable fields.
+            j1 = r1.json()
+            j2 = r2.json()
+            for key in ('answer', 'sources', 'language'):
+                assert j1[key] == j2[key], f'mismatch on {key}'
+
+        monkeypatch.setattr(RAGChain, 'get', real_get)
+
 # ===========================================================================
 # Integration tests (require live services)
 # ===========================================================================
