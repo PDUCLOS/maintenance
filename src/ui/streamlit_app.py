@@ -159,6 +159,22 @@ with tab_chat:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    # --- Welcome: starter prompt + suggested questions ---------------------
+    if not st.session_state.messages:
+        st.info(
+            "👋 **Bienvenue !** Pose ta question en français ou en anglais — "
+            "le copilote répond dans la même langue que toi, et cite ses sources.\n\n"
+            "**Si tu ne sais pas par où commencer, essaie :**\n"
+            "- _« Quelle est la capacité de charge dynamique de base (C) d'un roulement ? »_\n"
+            "- _« What is the rating life (L10) of a rolling bearing? »_\n"
+            "- _« Comment choisir une graisse pour un roulement à billes ? »_\n"
+            "- _« What are the most common failure modes for rolling bearings? »_\n\n"
+            "Ou utilise le **formulaire guidé** ci-dessous pour poser une question structurée."
+        )
+
+    # Controls above the chat history
+    top_k = st.slider("Nombre de sources récupérées (top-K)", min_value=1, max_value=20, value=5)
+
     # Controls above the chat history
     top_k = st.slider("Nombre de sources récupérées (top-K)", min_value=1, max_value=20, value=5)
 
