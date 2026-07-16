@@ -28,7 +28,7 @@ The UI renders the form fields, validates the required ones, and calls
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -43,7 +43,7 @@ class Category(str, Enum):
     OUT_OF_SCOPE = "Out of scope (test)"
 
     @classmethod
-    def display(cls, value: "Category | str") -> str:
+    def display(cls, value: Category | str) -> str:
         """Return the human label of the category (the enum value itself)."""
         if isinstance(value, Category):
             return value.value
@@ -272,13 +272,13 @@ def intents_by_category() -> dict[str, list[Intent]]:
 
 
 __all__ = [
+    "CMAPSS_SENSORS",
+    "CMAPSS_SUBSETS",
+    "INTENTS",
     "Category",
     "FieldDef",
     "Intent",
-    "INTENTS",
-    "CMAPSS_SUBSETS",
-    "CMAPSS_SENSORS",
-    "get_intent",
     "build_question",
+    "get_intent",
     "intents_by_category",
 ]

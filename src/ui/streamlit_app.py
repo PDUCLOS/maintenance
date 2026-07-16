@@ -25,7 +25,7 @@ import requests
 import streamlit as st
 
 from src.config import settings
-from src.rag.intents import INTENTS, Category, build_question
+from src.rag.intents import INTENTS, build_question
 
 API_BASE = f"http://localhost:{settings.api_port}"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -200,11 +200,11 @@ with tab_chat:
             for f in chosen_intent.fields:
                 if f.kind == "select":
                     options = [v for v, _ in f.options] or [f.default]
-                    labels = [l for _, l in f.options] or options
+                    labels = [lab for _, lab in f.options] or options
                     default_idx = options.index(f.default) if f.default in options else 0
                     field_values[f.name] = st.selectbox(
                         f.label, options, index=default_idx,
-                        format_func=lambda v, l=labels, o=options: l[o.index(v)] if v in o else v,
+                        format_func=lambda v, lab=labels, o=options: lab[o.index(v)] if v in o else v,
                         key=f"intent_{chosen_intent.key}_{f.name}",
                     )
                 elif f.kind == "number":

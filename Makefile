@@ -10,7 +10,7 @@
 #
 # Typical first run:
 #   make setup            # create venv, install deps
-#   make pull-models      # download Mistral 7B + bge-small (one-time, ~5 GB)
+#   make pull-models      # download Qwen2.5-7B-Instruct + bge-m3 (one-time, ~5 GB)
 #   make data             # download NASA CMAPSS (requires NASA PCoE account)
 #   make chroma-up        # start ChromaDB
 #   make ingest           # build the vector index
@@ -104,7 +104,7 @@ preflight: ## Verify the host is Apple Silicon (MLX will not work otherwise)
 
 # ----- Models ---------------------------------------------------------------
 .PHONY: pull-models
-pull-models: ## Download Mistral 7B (MLX) + bge-small embeddings into HF cache
+pull-models: ## Download Qwen2.5-7B-Instruct (MLX) + bge-small embeddings into HF cache
 	@echo ">> Downloading MLX models into HuggingFace cache..."
 	@echo "   Target LLM:    $(MLX_MODEL_REPO)"
 	@echo "   Target embed:  $(MLX_EMBED_REPO)"

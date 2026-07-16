@@ -39,7 +39,12 @@ import sys
 from pathlib import Path
 
 import chromadb
-from chromadb.errors import NotFoundError
+# Chroma 0.5 raised NotFoundError; Chroma 0.6+ renames it to
+# InvalidCollectionException. We accept both for forward-compat.
+try:
+    from chromadb.errors import InvalidCollectionException as NotFoundError
+except ImportError:  # pragma: no cover
+    from chromadb.errors import NotFoundError  # type: ignore[no-redef]
 
 # Project root: 2 levels up from this script (scripts/ → rag-copilot/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -88,17 +93,29 @@ def cmd_list(_args: argparse.Namespace) -> int:
         print("No collections found.")
         return 0
     rows: list[list[str]] = []
-    for c in colls:
-        marker = "*" if c.name == active else " "
+    # In Chroma 0.6+, list_collections returns collection names as
+    # plain strings. We need to call get_collection() to access the
+    # metadata (count, dimension). See migration note:
+    # https://docs.trychroma.com/deployment/migration
+    for name in colls:
+        marker = "*" if name == active else " "
         try:
+            c = client.get_collection(name)
             n = c.count()
         except Exception as e:  # noqa: BLE001
             n = f"err: {e}"
+        # Chroma 0.6+ removed the Collection.dimension attribute. We
+        # infer the dim from the first embedding returned by peek().
         try:
-            dim = c.dimension or "?"
-        except Exception:
+            peek = c.peek(limit=1)
+            embeddings = peek.get("embeddings") if peek else None
+            if embeddings is not None and len(embeddings) > 0:
+                dim = len(embeddings[0])
+            else:
+                dim = "0 (empty)"
+        except Exception:  # noqa: BLE001
             dim = "?"
-        rows.append([marker, c.name, str(dim), str(n)])
+        rows.append([marker, name, str(dim), str(n)])
     _print_table(
         ["", "NAME", "DIM", "COUNT"],
         rows,
