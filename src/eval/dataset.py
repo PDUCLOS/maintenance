@@ -25,7 +25,6 @@ from src.ingestion.cmapss_loader import SUBSETS, assert_cmapss_present, load_tra
 from src.utils.logger import logger
 from src.utils.timing import timed
 
-
 # Out-of-scope questions — the copilot MUST say "I don't know" for these.
 OUT_OF_SCOPE_QUESTIONS: list[str] = [
     "What is the price of a new turbofan engine?",
@@ -47,8 +46,7 @@ def _sensor_means_by_subset() -> dict[str, dict[str, float]]:
     for subset in SUBSETS:
         df = load_train(subset)
         means[subset] = {
-            f"sensor_{i:02d}": float(df[f"sensor_{i:02d}"].mean())
-            for i in range(1, 22)
+            f"sensor_{i:02d}": float(df[f"sensor_{i:02d}"].mean()) for i in range(1, 22)
         }
     return means
 
@@ -89,25 +87,31 @@ def _make_factual(rng: random.Random, means: dict[str, dict[str, float]]) -> lis
         n_units = int(df["unit_nr"].nunique())
         max_cycles = int(df["time_cycles"].max())
         # 3 per subset = 12 total, then we trim to keep the category at 10
-        out.append({
-            "question": f"How many turbofan engines are in the {subset} training set?",
-            "ground_truth": f"{n_units} engines.",
-            "category": "factual",
-        })
+        out.append(
+            {
+                "question": f"How many turbofan engines are in the {subset} training set?",
+                "ground_truth": f"{n_units} engines.",
+                "category": "factual",
+            }
+        )
         # pick a random sensor for the mean
         sensor_id = rng.randint(1, 21)
         col = f"sensor_{sensor_id:02d}"
         m = means[subset][col]
-        out.append({
-            "question": f"What is the mean of {col} across all cycles in {subset}?",
-            "ground_truth": f"{m:.2f}.",
-            "category": "factual",
-        })
-        out.append({
-            "question": f"What is the maximum number of cycles observed for any unit in {subset}?",
-            "ground_truth": f"{max_cycles} cycles.",
-            "category": "factual",
-        })
+        out.append(
+            {
+                "question": f"What is the mean of {col} across all cycles in {subset}?",
+                "ground_truth": f"{m:.2f}.",
+                "category": "factual",
+            }
+        )
+        out.append(
+            {
+                "question": f"What is the maximum number of cycles observed for any unit in {subset}?",
+                "ground_truth": f"{max_cycles} cycles.",
+                "category": "factual",
+            }
+        )
     # Trim to 10
     return out[:10]
 
@@ -121,14 +125,16 @@ def _make_reasoning(rng: random.Random, trends: dict[str, dict[str, str]]) -> li
             sensor_id = rng.randint(1, 21)
             col = f"sensor_{sensor_id:02d}"
             trend = trends[subset][col]
-            out.append({
-                "question": (
-                    f"Does {col} tend to increase, decrease, or stay stable as the engine "
-                    f"degrades in {subset}?"
-                ),
-                "ground_truth": f"{trend}.",
-                "category": "reasoning",
-            })
+            out.append(
+                {
+                    "question": (
+                        f"Does {col} tend to increase, decrease, or stay stable as the engine "
+                        f"degrades in {subset}?"
+                    ),
+                    "ground_truth": f"{trend}.",
+                    "category": "reasoning",
+                }
+            )
     return out[:10]
 
 
@@ -147,11 +153,13 @@ def _make_multi_hop(rng: random.Random) -> list[dict]:
                 gt = f"No data in {subset} at cycle {cycle}."
             else:
                 gt = f"{sub[col].mean():.2f}."
-            out.append({
-                "question": f"For {subset}, at cycle {cycle}, what is the mean of {col}?",
-                "ground_truth": gt,
-                "category": "multi_hop",
-            })
+            out.append(
+                {
+                    "question": f"For {subset}, at cycle {cycle}, what is the mean of {col}?",
+                    "ground_truth": gt,
+                    "category": "multi_hop",
+                }
+            )
     return out[:5]
 
 
@@ -199,7 +207,9 @@ def build() -> Path:
         n_by_cat[it["category"]] = n_by_cat.get(it["category"], 0) + 1
     logger.info(
         "Wrote {} eval items to {} (by category: {})",
-        len(items), out_path, n_by_cat,
+        len(items),
+        out_path,
+        n_by_cat,
     )
     return out_path
 

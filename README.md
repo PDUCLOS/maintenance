@@ -23,7 +23,7 @@ natural-language questions about industrial maintenance. It combines:
 - **Optional cross-encoder reranker** for top-K precision
 - **Tool calling** on a Python pandas DataFrame for quantitative questions
   (sensor stats, fleet size, RUL) — **closed DSL**, no arbitrary code execution
-- **A local LLM** (Mistral 7B Instruct, 4-bit, MLX-quantized) running on
+- **A local LLM** (Qwen2.5-7B Instruct, 4-bit, MLX-quantized) running on
   Apple Silicon via Apple's MLX framework
 - **RAGAS evaluation** (faithfulness, answer relevancy, context precision,
   context recall) with immutable snapshot history
@@ -50,7 +50,7 @@ git clone https://github.com/PDUCLOS/industrial-knowledge-copilot
 cd industrial-knowledge-copilot
 
 make setup              # create venv, install deps (~2-3 min)
-make pull-models        # download Mistral 7B + bge-small (~5 GB, one time, ~30 min)
+make pull-models        # download Qwen2.5-7B + bge-small (~5 GB, one time, ~30 min)
 make data               # download NASA CMAPSS (~12 MB compressed, direct from data.nasa.gov)
 make chroma-up          # start ChromaDB in Docker
 
@@ -83,7 +83,7 @@ flowchart LR
     HYB -->|dense| CHR[(ChromaDB<br/>:8001)]
     HYB -->|BM25| BM25[(In-memory<br/>BM25 index)]
     HYB -.->|optional| RR[Cross-Encoder<br/>Reranker]
-    RAG -->|generate| LLM[Mistral 7B<br/>MLX]
+    RAG -->|generate| LLM[Qwen2.5-7B<br/>MLX]
     RAG -->|tool| TOOL[query_cmapss<br/>pandas DSL]
     TOOL --> DF[(CMAPSS<br/>DataFrame)]
 ```
@@ -103,7 +103,7 @@ See `Makefile` for the orchestration.
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| LLM | Mistral 7B Instruct (4-bit, MLX) | Local, FR-correct, free, fast on M-series |
+| LLM | Qwen2.5-7B Instruct (4-bit, MLX) | Local, free, fast on M-series, best ReAct tool-calling reliability in A/B (see PLAN.md §8) |
 | Embeddings | bge-small-en-v1.5 (4-bit, MPS) | 33M params, fast, high-quality EN |
 | Vector store | ChromaDB 0.5 | Local, simple, sufficient for < 100k chunks |
 | Orchestration | LangChain v0.3 LCEL | Standard market 2026, requested in 80% of JDs |
@@ -145,7 +145,7 @@ src/
 │   ├── vectorstore.py       # ChromaDB HTTP client
 │   ├── retriever.py         # Hybrid (BM25 + dense, RRF)
 │   ├── reranker.py          # Cross-encoder reranker (optional)
-│   ├── llm.py               # MLX-backed Mistral 7B (LangChain-compatible)
+│   ├── llm.py               # MLX-backed Qwen2.5-7B (LangChain-compatible)
 │   ├── chain.py             # LCEL RAG chain
 │   ├── agent.py             # ReAct agent + query_cmapss tool (closed DSL)
 │   ├── types.py             # shared types (RetrievedChunk)

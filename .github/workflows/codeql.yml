@@ -1,0 +1,54 @@
+name: CodeQL
+
+# CodeQL static analysis. Runs on push to main, on PRs against main, and
+# weekly (Mondays) for ongoing coverage of new advisories. The Python
+# analysis is what matters here; the Actions analysis is a bonus.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays at 06:00 UTC
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            paths: src/ scripts/ tests/
+          - language: actions
+            paths: .github/workflows/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          paths: ${{ matrix.paths }}
+          # Custom query packs: extend the default security-extended suite
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/codeql-results.sarif
+        continue-on-error: true

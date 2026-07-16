@@ -34,6 +34,20 @@ from src.utils.logger import logger
 from src.utils.timing import timed
 
 
+def _read_text_any_encoding(path: Path) -> str:
+    """Read a text file, tolerating non-UTF-8 legacy encodings.
+
+    NASA's CMAPSS readme.txt ships with a handful of cp1252 characters
+    (e.g. em-dashes) despite being otherwise ASCII — plain UTF-8 decoding
+    fails on it.
+    """
+    raw = path.read_bytes()
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252")
+
+
 @timed
 def run() -> None:
     """Execute the full ingestion pipeline. Raises on any error."""
@@ -46,7 +60,7 @@ def run() -> None:
     # 1a. CMAPSS readme
     readme = discover_readme()
     if readme:
-        corpus.append((readme.read_text(encoding="utf-8"), "cmapss:readme", {"type": "doc"}))
+        corpus.append((_read_text_any_encoding(readme), "cmapss:readme", {"type": "doc"}))
 
     # 1b. CMAPSS per-subset structured data (textualised)
     for subset in SUBSETS:
@@ -56,12 +70,20 @@ def run() -> None:
 
     # 1c. PDFs
     for page in load_all_pdfs():
+        # Source must include the page number: build_chunks() derives
+        # chunk_id from source + a per-source chunk index, so two pages
+        # of the same PDF sharing a source would collide on chunk_id
+        # (Chroma rejects duplicate IDs within a single upsert).
         corpus.append(
-            (page.text, f"pdf:{page.file_name}", {
-                "type": "pdf",
-                "file_name": page.file_name,
-                "page": str(page.page_number),
-            })
+            (
+                page.text,
+                f"pdf:{page.file_name}:p{page.page_number}",
+                {
+                    "type": "pdf",
+                    "file_name": page.file_name,
+                    "page": str(page.page_number),
+                },
+            )
         )
 
     logger.info("Corpus: {} raw documents", len(corpus))
@@ -74,12 +96,18 @@ def run() -> None:
     settings.processed_data_dir.mkdir(parents=True, exist_ok=True)
     with settings.chunks_file.open("w", encoding="utf-8") as f:
         for c in chunks:
-            f.write(json.dumps({
-                "chunk_id": c.chunk_id,
-                "text": c.text,
-                "source": c.source,
-                **c.metadata,
-            }, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "chunk_id": c.chunk_id,
+                        "text": c.text,
+                        "source": c.source,
+                        **c.metadata,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
     logger.info("Wrote chunks to {}", settings.chunks_file)
 
     # 4. Embed + upsert
@@ -127,10 +155,12 @@ def _dataframe_to_text(df, subset: str) -> str:
 
     # Per-sensor trend: compare mean over the first 30% of max cycle vs
     # the last 30% of max cycle. Stable, increase, or decrease.
-    lines.extend([
-        "",
-        "## Sensor trends (first 30% vs last 30% of max cycle)",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Sensor trends (first 30% vs last 30% of max cycle)",
+        ]
+    )
     cutoff = int(max_cycle * 0.3)
     first_mask = df["time_cycles"] <= cutoff
     last_mask = df["time_cycles"] > (max_cycle - cutoff)

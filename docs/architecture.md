@@ -16,7 +16,7 @@ maintenance by combining:
    (chunked + embedded in a vector store)
 2. **Tool calling** on a Python pandas DataFrame for quantitative questions
    (mean RUL, sensor stats, fleet size, etc.)
-3. **A local LLM** (Mistral 7B Instruct, 4-bit MLX-quantized) running on
+3. **A local LLM** (Qwen2.5-7B Instruct, 4-bit MLX-quantized) running on
    Apple Silicon via Apple's MLX framework
 
 All inference is local. No data leaves the machine. The only network
@@ -29,7 +29,7 @@ The user requirement is a project that runs on a MacBook Pro M5 Pro with
 Metal GPU acceleration. Apple MLX is the framework with the best
 Metal/Metal Performance Shaders (MPS) integration as of 2026:
 
-- **Mistral 7B Instruct (4-bit)**: ~4.5 GB on disk, ~5 GB RAM at inference,
+- **Qwen2.5-7B Instruct (4-bit)**: ~4.5 GB on disk, ~5 GB RAM at inference,
   2–5 s/query on M-series with Metal
 - **bge-small embeddings (4-bit)**: 33M params, 384-dim, fast on MPS
 - **No GPU/CPU split**: MLX uses the unified memory of Apple Silicon, so
@@ -60,7 +60,7 @@ flowchart LR
     RAG -->|retrieve| HYB[Hybrid Retriever]
     HYB -->|dense| CHR[(ChromaDB<br/>:8001)]
     HYB -->|BM25| BM25[(In-memory<br/>BM25 index)]
-    RAG -->|generate| LLM[Mistral 7B<br/>MLX]
+    RAG -->|generate| LLM[Qwen2.5-7B<br/>MLX]
     RAG -->|tool| TOOL[query_cmapss<br/>pandas]
     TOOL --> DF[(CMAPSS<br/>DataFrame)]
 ```
@@ -110,7 +110,7 @@ for CI (Linux) and future cloud-deploy scenarios.
 
 | Decision | Why | When to revisit |
 |----------|-----|-----------------|
-| Mistral 7B (4-bit) | Fast, FR-correct, free, local | If RAGAS faithfulness < 0.7 — try Mistral 7B v0.3 or Llama-3 8B |
+| Qwen2.5-7B (4-bit) | Fast, free, local, best measured ReAct tool-calling reliability (A/B vs Mistral-7B-v0.3, see PLAN.md §8) | If RAGAS faithfulness < 0.7 — try Qwen2.5-14B or Llama-3 8B |
 | bge-small (EN, 33M) | Fast, good EN quality | If multi-lingual PDF support needed — switch to bge-m3 or nomic-embed |
 | BM25 in-memory | Cheap, fits < 5k chunks | If collection > 100k chunks — use a persistent BM25 (e.g. pyserini) |
 | Reciprocal Rank Fusion | No score calibration needed | If RAGAS context_precision < 0.7 — try Cross-Encoder reranking |

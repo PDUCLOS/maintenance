@@ -79,7 +79,7 @@ def assert_cmapss_present(subset: str | None = None) -> None:
     subsets = (subset,) if subset else SUBSETS
     missing: list[str] = []
     for s in subsets:
-        for kind, path in expected_files(s).items():
+        for _kind, path in expected_files(s).items():
             if not path.is_file():
                 missing.append(str(path))
     if missing:
@@ -124,7 +124,7 @@ def load_train(subset: str) -> pd.DataFrame:
     assert subset in SUBSETS, f"Unknown CMAPSS subset: {subset}"
     path = expected_files(subset)["train"]
     df = _read_cmapss_table(path)
-    logger.info("Loaded CMAPSS {} train: {} rows × {} cols", subset, len(df), len(df.columns))
+    logger.info("Loaded CMAPSS {} train: {} rows x {} cols", subset, len(df), len(df.columns))
     return df
 
 
@@ -138,7 +138,7 @@ def load_test(subset: str) -> pd.DataFrame:
     assert subset in SUBSETS, f"Unknown CMAPSS subset: {subset}"
     path = expected_files(subset)["test"]
     df = _read_cmapss_table(path)
-    logger.info("Loaded CMAPSS {} test: {} rows × {} cols", subset, len(df), len(df.columns))
+    logger.info("Loaded CMAPSS {} test: {} rows x {} cols", subset, len(df), len(df.columns))
     return df
 
 
@@ -179,10 +179,10 @@ def discover_readme() -> Path | None:
 __all__ = [
     "COLUMN_NAMES",
     "SUBSETS",
-    "expected_files",
     "assert_cmapss_present",
-    "load_train",
-    "load_test",
-    "load_rul",
     "discover_readme",
+    "expected_files",
+    "load_rul",
+    "load_test",
+    "load_train",
 ]

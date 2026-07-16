@@ -8,6 +8,7 @@ Requires:
 from __future__ import annotations
 
 import json
+
 import pytest
 
 
@@ -16,9 +17,9 @@ def test_eval_dataset_minimum_size():
     """The eval dataset should have at least 20 items (PLAN §6)."""
     from src.config import settings
 
-    assert settings.eval_dataset_file.is_file(), (
-        f"Eval dataset missing: {settings.eval_dataset_file}. Run 'make eval-dataset'."
-    )
+    assert (
+        settings.eval_dataset_file.is_file()
+    ), f"Eval dataset missing: {settings.eval_dataset_file}. Run 'make eval-dataset'."
     with settings.eval_dataset_file.open() as f:
         items = [json.loads(line) for line in f if line.strip()]
     assert len(items) >= 20
@@ -29,9 +30,9 @@ def test_eval_dataset_has_all_categories():
     """The dataset should cover factual, reasoning, multi_hop, out_of_scope."""
     from src.config import settings
 
-    assert settings.eval_dataset_file.is_file(), (
-        f"Eval dataset missing: {settings.eval_dataset_file}."
-    )
+    assert (
+        settings.eval_dataset_file.is_file()
+    ), f"Eval dataset missing: {settings.eval_dataset_file}."
     with settings.eval_dataset_file.open() as f:
         items = [json.loads(line) for line in f if line.strip()]
     categories = {it["category"] for it in items}
@@ -124,6 +125,7 @@ def test_query_cmapss_tool_unsupported_op():
 
 
 # --- DSL parser tests (Bug #5 fix) -----------------------------------------
+
 
 def test_parse_dsl_query_unit_count():
     from src.rag.agent import _parse_dsl_query

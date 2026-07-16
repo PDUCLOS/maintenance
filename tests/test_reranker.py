@@ -7,11 +7,9 @@ behind @pytest.mark.integration and require Apple Silicon.
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from src.rag.reranker import Reranker, RERANK_OVERFETCH
+from src.rag.reranker import RERANK_OVERFETCH, Reranker
 from src.rag.types import RetrievedChunk
 
 
@@ -49,15 +47,16 @@ def test_reranker_picks_relevant_chunks_first():
     """The cross-encoder should rank 'apple' higher than 'banana' for query 'fruit'."""
     # Mock the model to avoid loading the real one
     mock_model = MagicMock()
-    # Mock scores: 'apple' (relevant) > 'banana' (irrelevant)
-    mock_model.predict.return_value = [0.9, 0.1, 0.5]
+    chunks = [
+        _make_chunk("c1", "banana"),
+        _make_chunk("c2", "apple"),
+        _make_chunk("c3", "cherry"),
+    ]
+    # predict() scores line up positionally with `chunks` (via the
+    # `pairs` built from it) — apple (c2) is the mocked most relevant.
+    mock_model.predict.return_value = [0.1, 0.9, 0.5]
 
     with patch.object(Reranker, "_model", mock_model):
-        chunks = [
-            _make_chunk("c1", "banana"),
-            _make_chunk("c2", "apple"),
-            _make_chunk("c3", "cherry"),
-        ]
         r = Reranker()
         out = r.rerank("fruit", chunks, top_n=2)
 
@@ -80,7 +79,7 @@ def test_reranker_model_loads_once_under_concurrent_calls():
 
     call_count = 0
 
-    def fake_load():
+    def fake_load(*args, **kwargs):
         nonlocal call_count
         call_count += 1
         return MagicMock()
