@@ -517,3 +517,189 @@ class TestPerSourceRetrievalPrecision:
         result = _per_source_retrieval_precision(items, samples)
         # Only q2 counts (q1 has invalid format)
         assert result == {"foo.pdf": 1.0}
+
+
+# ===========================================================================
+# src.rag.retriever — BM25 cache
+# ===========================================================================
+
+
+def _fake_collection(docs: list[dict]) -> dict:
+    """Build the chroma .get() return shape from a list of dicts."""
+    return {
+        "ids": [d["id"] for d in docs],
+        "documents": [d["text"] for d in docs],
+        "metadatas": [d.get("meta", {}) for d in docs],
+    }
+
+
+class _StubCollection:
+    """Minimal stand-in for chromadb's collection."""
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def get(self, include=None):
+        return self._payload
+
+
+class _StubVectorStore:
+    def __init__(self, payload: dict) -> None:
+        self._collection = _StubCollection(payload)
+
+
+class _StubEmbedder:
+    def embed(self, texts):
+        return [[0.0] * 1024 for _ in texts]
+
+
+class TestBM25CorpusHash:
+    """The corpus hash is what tells us whether the on-disk cache is
+    still valid. False negatives = unnecessary rebuilds. False positives
+    = serving stale chunks. These tests pin both invariants."""
+
+    def test_same_corpus_same_hash(self):
+        from src.rag.retriever import HybridRetriever
+
+        docs = [
+            {"id": f"c{i}", "text": f"hello world {i}", "meta": {"source": "s.pdf"}}
+            for i in range(10)
+        ]
+        r1 = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(docs)), embedder=_StubEmbedder()
+        )
+        r2 = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(docs)), embedder=_StubEmbedder()
+        )
+        h1 = r1._corpus_hash(r1._fetch_all_documents())
+        h2 = r2._corpus_hash(r2._fetch_all_documents())
+        assert h1 == h2
+
+    def test_different_text_different_hash(self):
+        from src.rag.retriever import HybridRetriever
+
+        d1 = [{"id": "c1", "text": "alpha", "meta": {}}]
+        d2 = [{"id": "c1", "text": "BETA", "meta": {}}]
+        r1 = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(d1)), embedder=_StubEmbedder()
+        )
+        r2 = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(d2)), embedder=_StubEmbedder()
+        )
+        h1 = r1._corpus_hash(r1._fetch_all_documents())
+        h2 = r2._corpus_hash(r2._fetch_all_documents())
+        assert h1 != h2
+
+    def test_different_id_different_hash(self):
+        from src.rag.retriever import HybridRetriever
+
+        d1 = [{"id": "c1", "text": "alpha", "meta": {}}]
+        d2 = [{"id": "c2", "text": "alpha", "meta": {}}]
+        r1 = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(d1)), embedder=_StubEmbedder()
+        )
+        r2 = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(d2)), embedder=_StubEmbedder()
+        )
+        h1 = r1._corpus_hash(r1._fetch_all_documents())
+        h2 = r2._corpus_hash(r2._fetch_all_documents())
+        assert h1 != h2
+
+    def test_hash_is_short_hex(self):
+        """16 hex chars (64 bits) — long enough to avoid collisions
+        on a single corpus, short enough to read in a log line."""
+        from src.rag.retriever import HybridRetriever
+
+        docs = [{"id": "c1", "text": "alpha", "meta": {}}]
+        r = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(docs)), embedder=_StubEmbedder()
+        )
+        h = r._corpus_hash(r._fetch_all_documents())
+        assert len(h) == 16
+        assert all(c in "0123456789abcdef" for c in h)
+
+
+class TestBM25CacheRoundTrip:
+    """Save → load the cache; the loaded BM25 must work and return the
+    same top result for a query. This is the smoke test the user will
+    feel on every API restart."""
+
+    def test_cache_load_succeeds_after_save(self, tmp_path, monkeypatch):
+        import src.rag.retriever as retriever_mod
+
+        monkeypatch.setattr(retriever_mod, "_BM25_CACHE_PATH", tmp_path / "bm25_cache.pkl")
+
+        from src.rag.retriever import HybridRetriever
+
+        docs = [
+            {
+                "id": f"c{i}",
+                "text": f"roulement à billes SKF {i} charge {i * 100}N",
+                "meta": {"source": "skf.pdf"},
+            }
+            for i in range(50)
+        ]
+        r = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(docs)), embedder=_StubEmbedder()
+        )
+
+        # 1st call: rebuild + save
+        bm25_first = r._ensure_bm25()
+        assert (tmp_path / "bm25_cache.pkl").is_file()
+
+        # 2nd call: load from disk
+        r._bm25 = None
+        r._bm25_dirty = True
+        bm25_second = r._ensure_bm25()
+
+        # Same query → same top result
+        results_first = bm25_first.invoke("SKF")
+        results_second = bm25_second.invoke("SKF")
+        assert results_first[0].metadata["chunk_id"] == results_second[0].metadata["chunk_id"]
+
+    def test_cache_miss_when_corpus_changes(self, tmp_path, monkeypatch):
+        """If the corpus content changes, the cache is detected as stale
+        and a rebuild is triggered (no serving of stale data)."""
+        import src.rag.retriever as retriever_mod
+
+        monkeypatch.setattr(retriever_mod, "_BM25_CACHE_PATH", tmp_path / "bm25_cache.pkl")
+
+        from src.rag.retriever import HybridRetriever
+
+        docs_v1 = [{"id": "c1", "text": "alpha bravo", "meta": {}}]
+        r = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(docs_v1)), embedder=_StubEmbedder()
+        )
+        r._ensure_bm25()  # build cache
+        assert (tmp_path / "bm25_cache.pkl").is_file()
+
+        # Now swap the corpus (simulate re-ingestion with different text)
+        docs_v2 = [{"id": "c1", "text": "completely different content", "meta": {}}]
+        r.vectorstore = _StubVectorStore(_fake_collection(docs_v2))
+        r._bm25 = None
+        r._bm25_dirty = True
+        # _ensure_bm25 should detect the hash mismatch and rebuild
+        r._ensure_bm25()
+        # The cache file should now reflect the v2 corpus hash
+        # (verify by re-loading and checking the hash field)
+        import pickle
+
+        blob = pickle.loads((tmp_path / "bm25_cache.pkl").read_bytes())
+        v2_hash = r._corpus_hash(r._fetch_all_documents())
+        assert blob["corpus_hash"] == v2_hash
+
+    def test_invalidate_drops_disk_cache(self, tmp_path, monkeypatch):
+        import src.rag.retriever as retriever_mod
+
+        monkeypatch.setattr(retriever_mod, "_BM25_CACHE_PATH", tmp_path / "bm25_cache.pkl")
+
+        from src.rag.retriever import HybridRetriever
+
+        docs = [{"id": "c1", "text": "alpha", "meta": {}}]
+        r = HybridRetriever(
+            vectorstore=_StubVectorStore(_fake_collection(docs)), embedder=_StubEmbedder()
+        )
+        r._ensure_bm25()
+        assert (tmp_path / "bm25_cache.pkl").is_file()
+        r.invalidate_bm25_cache()
+        assert not (tmp_path / "bm25_cache.pkl").is_file()

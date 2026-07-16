@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.metrics import install_metrics
 from src.api.routes import eval as eval_route
 from src.api.routes import index as index_route
 from src.api.routes import ingest as ingest_route
@@ -64,6 +65,11 @@ app.include_router(query_route.router)
 app.include_router(ingest_route.router)
 app.include_router(eval_route.router)
 app.include_router(index_route.router)
+
+# Prometheus-style /metrics endpoint + middleware. See src/api/metrics.py
+# for the format. Excluded from /docs because it's a scrape target, not
+# a human-facing API.
+install_metrics(app)
 
 # API versioning — same handlers exposed under /v1/* (the documented
 # stable surface). The bare /query /ingest /eval /index paths remain

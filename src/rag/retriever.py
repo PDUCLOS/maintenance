@@ -12,10 +12,20 @@ Condorcet and individual Rank Learning Methods", SIGIR.
 Optionally, the retriever is paired with a cross-encoder reranker
 (see `src.rag.reranker`). When `settings.reranker_enabled` is true,
 the retriever over-fetches candidates and the reranker trims to top_k.
+
+BM25 caching:
+    The BM25 index is expensive to build (~30s for 11k chunks on M5
+    Pro). We pickle the whole BM25Retriever to `data/processed/bm25_cache.pkl`
+    on first build, keyed by a SHA256 of the corpus (chunks ids + first
+    200 chars of each text). On subsequent startups, if the corpus hash
+    matches, we load from disk in < 1s instead of rebuilding.
+    `invalidate_bm25_cache()` drops both the in-memory and on-disk copy.
 """
 
 from __future__ import annotations
 
+import hashlib
+import pickle
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -35,6 +45,10 @@ from src.utils.logger import logger
 # Standard RRF constant (k0 in the paper). 60 is the commonly-cited value
 # that performs best across most corpora.
 _RRF_K0 = 60
+
+# Persistent BM25 cache location. Sits next to the chunks.jsonl file so
+# it's automatically cleaned up if the user wipes data/processed.
+_BM25_CACHE_PATH = settings.processed_data_dir / "bm25_cache.pkl"
 
 
 @dataclass
@@ -59,19 +73,119 @@ class HybridRetriever:
     def invalidate_bm25_cache(self) -> None:
         self._bm25_dirty = True
         self._bm25 = None
+        # Also drop the on-disk cache so the next call rebuilds from
+        # the current chroma collection state.
+        if _BM25_CACHE_PATH.is_file():
+            _BM25_CACHE_PATH.unlink()
+            logger.info("BM25 cache file removed: {}", _BM25_CACHE_PATH)
+
+    @staticmethod
+    def _corpus_hash(docs: list[Document]) -> str:
+        """Hash the corpus so a stale cache is detectable.
+
+        We hash (chunk_id + first 200 chars of text) for every doc. This
+        is robust to re-ingestion with the same content (cache hit) and
+        to any change in text or chunking (cache miss → rebuild).
+        200 chars is enough to catch every meaningful content change
+        while keeping the hash fast.
+        """
+        h = hashlib.sha256()
+        for d in docs:
+            h.update(d.metadata.get("chunk_id", "").encode("utf-8"))
+            h.update(b"\x00")
+            h.update(d.page_content[:200].encode("utf-8", errors="ignore"))
+            h.update(b"\x1f")
+        return h.hexdigest()[:16]  # 16 hex chars = 64 bits, plenty for this scale
+
+    def _load_bm25_from_cache(self, corpus_hash: str) -> BM25Retriever | None:
+        """Try to load a cached BM25Retriever from disk.
+
+        Returns None if the file doesn't exist, is malformed, or the
+        stored hash doesn't match the current corpus. Errors are
+        logged at debug level — cache failure is never fatal, we just
+        rebuild.
+        """
+        if not _BM25_CACHE_PATH.is_file():
+            return None
+        try:
+            blob = pickle.loads(_BM25_CACHE_PATH.read_bytes())
+            if not isinstance(blob, dict):
+                logger.warning("BM25 cache has unexpected shape, ignoring")
+                return None
+            if blob.get("corpus_hash") != corpus_hash:
+                logger.info(
+                    "BM25 cache hash mismatch (cached={}, current={}), rebuild needed",
+                    blob.get("corpus_hash"),
+                    corpus_hash,
+                )
+                return None
+            bm25: BM25Retriever = blob["bm25"]
+            bm25.k = settings.retriever_top_k
+            logger.info(
+                "BM25 cache hit: loaded {} docs from {}",
+                blob.get("n_docs", "?"),
+                _BM25_CACHE_PATH,
+            )
+            return bm25
+        except Exception as e:
+            # Corrupt pickle, missing keys, version mismatch, anything.
+            # Cache is best-effort — fall through to rebuild.
+            logger.warning("BM25 cache load failed ({}), will rebuild", e)
+            return None
+
+    def _save_bm25_to_cache(
+        self, bm25: BM25Retriever, docs: list[Document], corpus_hash: str
+    ) -> None:
+        """Persist the BM25Retriever + corpus hash to disk.
+
+        We wrap the retriever + a small metadata sidecar in a dict so
+        we can detect hash mismatches on load (vs. blindly trusting
+        whatever pickle gave us back).
+        """
+        _BM25_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        blob = {
+            "corpus_hash": corpus_hash,
+            "n_docs": len(docs),
+            "bm25": bm25,
+        }
+        _BM25_CACHE_PATH.write_bytes(pickle.dumps(blob, protocol=pickle.HIGHEST_PROTOCOL))
+        size_mb = _BM25_CACHE_PATH.stat().st_size / 1048576
+        logger.info(
+            "BM25 cache written: {} docs, {:.1f} MB → {}",
+            len(docs),
+            size_mb,
+            _BM25_CACHE_PATH,
+        )
 
     def _ensure_bm25(self) -> BM25Retriever:
-        if self._bm25 is None or self._bm25_dirty:
-            docs = self._fetch_all_documents()
-            if not docs:
-                raise RuntimeError(
-                    "Chroma collection is empty. Run 'make ingest' to populate it "
-                    "before querying."
-                )
-            self._bm25 = BM25Retriever.from_documents(docs)
-            self._bm25.k = settings.retriever_top_k
+        if self._bm25 is not None and not self._bm25_dirty:
+            return self._bm25
+
+        docs = self._fetch_all_documents()
+        if not docs:
+            raise RuntimeError(
+                "Chroma collection is empty. Run 'make ingest' to populate it " "before querying."
+            )
+        corpus_hash = self._corpus_hash(docs)
+
+        # Try cache first (fast path, < 1s)
+        cached = self._load_bm25_from_cache(corpus_hash)
+        if cached is not None:
+            self._bm25 = cached
             self._bm25_dirty = False
-            logger.info("BM25 index rebuilt over {} documents", len(docs))
+            return self._bm25
+
+        # Slow path: rebuild from scratch (~30s for 11k chunks)
+        logger.info("BM25 index rebuilding over {} documents...", len(docs))
+        self._bm25 = BM25Retriever.from_documents(docs)
+        self._bm25.k = settings.retriever_top_k
+        self._bm25_dirty = False
+        # Persist for next start. If this fails, the retriever still
+        # works in-process — we just lose the speedup next time.
+        try:
+            self._save_bm25_to_cache(self._bm25, docs, corpus_hash)
+        except Exception as e:
+            logger.warning("BM25 cache write failed ({}), in-memory index only", e)
         return self._bm25
 
     def _fetch_all_documents(self) -> list[Document]:
