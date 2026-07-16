@@ -107,9 +107,7 @@ def _build_hf_dataset(samples: list[dict]):
     return Dataset.from_list(samples)
 
 
-def _per_source_retrieval_precision(
-    items: list[dict], samples: list[dict]
-) -> dict[str, float]:
+def _per_source_retrieval_precision(items: list[dict], samples: list[dict]) -> dict[str, float]:
     """For each eval item with an `expected_source`, check whether the
     chain surfaced that source in the top-K. Aggregated by PDF filename.
 
@@ -144,8 +142,7 @@ def _per_source_retrieval_precision(
 
     # Per-source precision: hit count / total questions about that source
     return {
-        filename: (sum(hits) / len(hits)) if hits else 0.0
-        for filename, hits in by_source.items()
+        filename: (sum(hits) / len(hits)) if hits else 0.0 for filename, hits in by_source.items()
     }
 
 
@@ -233,9 +230,7 @@ def run(dataset_path: Path, metrics: list[str]) -> EvalSnapshot:
     # actually surface that source in the top-K? Aggregated by PDF.
     per_source = _per_source_retrieval_precision(items, samples)
     for source_name, score in sorted(per_source.items()):
-        metric_results.append(
-            MetricResult(name=f"retrieval@{source_name}", score=score)
-        )
+        metric_results.append(MetricResult(name=f"retrieval@{source_name}", score=score))
         logger.info("Per-source retrieval precision: {} = {:.3f}", source_name, score)
 
     snapshot = _snapshot(metric_results, len(samples))

@@ -175,9 +175,6 @@ with tab_chat:
     # Controls above the chat history
     top_k = st.slider("Nombre de sources récupérées (top-K)", min_value=1, max_value=20, value=5)
 
-    # Controls above the chat history
-    top_k = st.slider("Nombre de sources récupérées (top-K)", min_value=1, max_value=20, value=5)
-
     # --- Guided question (intent picker) -----------------------------------
     with st.expander("🎯 Question guidée — choisis un template", expanded=False):
         st.caption(

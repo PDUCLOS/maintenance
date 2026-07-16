@@ -162,6 +162,10 @@ ui: ## Start the Streamlit UI on :8501
 	# ModuleNotFoundError unless PYTHONPATH is set explicitly here.
 	PYTHONPATH=. $(VENV_BIN)/streamlit run src/ui/streamlit_app.py --server.port $(UI_PORT) --server.address 0.0.0.0
 
+.PHONY: dev
+dev: ## One-command local launch: chroma-up (if needed) + API + UI, Ctrl+C to stop
+	./scripts/dev_up.sh
+
 # ----- Evaluation -----------------------------------------------------------
 .PHONY: eval
 eval: ## Run the RAGAS evaluation suite and snapshot the scores
