@@ -67,6 +67,51 @@ short SHA (first 7 chars) for traceability.
   - No `🤖 Generated with <AI>` footer
   - Verified across 22 commits.
 
+### Added
+- **Streamlit UI split into per-tab modules** (commit `1014cb8`):
+  - `src/ui/api_client.py` — httpx wrapper (`api_get` / `api_post`),
+    streamlit-agnostic, base URL hardcoded to `localhost:<port>`.
+  - `src/ui/sidebar.py` — common sidebar (about + system status).
+  - `src/ui/tabs/{chat,inventory,ragas,index}.py` — one render()
+    function per tab.
+  - `src/ui/streamlit_app.py` — 52-line thin shell, was 485 lines.
+- **18 new UI unit tests** (`tests/test_ui_helpers.py`): api_get/post
+  (4 error paths + 2 happy paths), base URL, brand inference
+  (Schaeffler / FAG-INA / SKF / NTN-SNR / case-insensitive),
+  metric coloring (>=0.75 green, >=0.5 yellow, else red), snapshot
+  loading.
+- **One-command dev launcher** — `make dev` → `scripts/dev_up.sh`
+  boots ChromaDB (Docker) + FastAPI + Streamlit with `Ctrl+C` to stop.
+  Sets `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` / `PYTHONUNBUFFERED=1`
+  for stable local runs.
+
+### Changed
+- **Versioned API namespace `/v1/*`** (commit `a87b512`): the FastAPI
+  app now exposes both the legacy bare paths (`/query`, `/ingest`,
+  `/eval`, `/health`, `/index/stats`) AND the new `/v1/*` prefix
+  pointing to the same handlers. Backward compat: existing clients
+  that hit `/query` keep working. New clients should use `/v1/query`.
+- **Hard timeout on `/query`** (commit `4b2fcbc`): the LLM call is
+  wrapped in a `ThreadPoolExecutor` (max_workers=4). 60s default,
+  returns 504 with `{"error": "query_timeout", "elapsed_ms": N}` on
+  exceed, 500 with `{"error": "internal_error"}` on raise.
+- **Per-source retrieval precision** (commit `0b54120`): custom
+  RAGAS metric aggregating `expected_source` hits per PDF filename.
+  10/25 eval items have an `expected_source` annotation; the metric
+  reports one number per source so we can see which catalogue the
+  retriever surfaces most reliably.
+- **CHANGELOG references** — the document now cross-references commit
+  short-SHAs for every change (instead of just "what", it shows
+  "where in git history").
+
+### Fixed
+- **Ruff format drift on test files** — `tests/test_api.py` and
+  `tests/test_pure_helpers.py` reformatted to match the project's
+  ruff config (line-length 100, pyupgrade rules).
+- **Duplicate `top_k` slider in Streamlit** — a leftover copy of the
+  `st.slider(...)` line in the chat tab was rendering the control
+  twice. Removed.
+
 ---
 
 ## [0.1.0] — 2026-07-16
