@@ -45,7 +45,7 @@ tiktoken==0.8.0         # Token counting for chunking
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
 pydantic==2.10.2
-pydantic-settings==2.6.1
+pydantic-settings==2.14.2
 python-multipart==0.0.19  # for /ingest file uploads
 
 # --- UI (Streamlit) ---------------------------------------------------------
