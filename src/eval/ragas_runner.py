@@ -1,10 +1,11 @@
 """Run RAGAS evaluation on the configured dataset.
 
 The runner:
-  1. Loads the eval dataset (JSONL: question, ground_truth)
+  1. Loads the eval dataset (JSONL: question, ground_truth, expected_source)
   2. Runs the RAG chain on every question
   3. Feeds (question, answer, contexts, ground_truth) into RAGAS
-  4. Snapshots the metrics to reports/eval_<UTC-timestamp>.json
+  4. Computes a custom per-source retrieval precision
+  5. Snapshots all metrics to reports/eval_<UTC-timestamp>.json
 
 Usage:
     python -m src.eval.ragas_runner
@@ -66,7 +67,13 @@ def _load_dataset(path: Path) -> list[dict]:
 
 
 def _build_ragas_samples(items: list[dict], chain: RAGChain) -> list[dict]:
-    """Run the RAG chain on every eval question and collect (q, a, ctxs, gt)."""
+    """Run the RAG chain on every eval question and collect (q, a, ctxs, sources, gt).
+
+    Note: we include `context_sources` alongside `contexts` (the standard
+    RAGAS field) so our per-source retrieval metric can compare the
+    expected_source in the dataset to what the retriever actually returned.
+    RAGAS itself ignores `context_sources` (it only reads `contexts`).
+    """
     samples: list[dict] = []
     for i, item in enumerate(items, start=1):
         question = item["question"]
@@ -74,15 +81,18 @@ def _build_ragas_samples(items: list[dict], chain: RAGChain) -> list[dict]:
             response = chain.query(question)
             answer = response.answer
             contexts = [c.text for c in response.sources]
+            context_sources = [c.source for c in response.sources]
         except Exception as e:
             logger.warning("Sample {} failed: {}", i, e)
             answer = "ERROR: chain failed"
             contexts = []
+            context_sources = []
         samples.append(
             {
                 "question": question,
                 "answer": answer,
                 "contexts": contexts,
+                "context_sources": context_sources,
                 "ground_truth": item["ground_truth"],
             }
         )
@@ -95,6 +105,62 @@ def _build_hf_dataset(samples: list[dict]):
     from datasets import Dataset
 
     return Dataset.from_list(samples)
+
+
+def _per_source_retrieval_precision(
+    items: list[dict], samples: list[dict]
+) -> dict[str, float]:
+    """For each eval item with an `expected_source`, check whether the
+    chain surfaced that source in the top-K. Aggregated by PDF filename.
+
+    Returns a dict {filename: precision}, where precision is the
+    fraction of eval items about that PDF whose expected source was
+    retrieved in the top-K (substring match: `expected_source`
+    starts with `pdf:FILENAME.pdf`, we check if any retrieved chunk
+    has the same source).
+
+    Why this matters: the standard RAGAS context_precision averages
+    across all samples, but doesn't tell you WHICH PDF the retriever
+    is failing on. This per-source view is much more actionable —
+    "we're failing on Schaeffler SP1 specifically" is more useful than
+    "context_precision is 0.7 on average".
+    """
+    by_source: dict[str, list[bool]] = {}  # filename -> [hit, miss, ...]
+
+    for item, sample in zip(items, samples, strict=True):
+        expected = item.get("expected_source")
+        if not expected:
+            continue
+        # expected_source format: "pdf:FILENAME.pdf:pN"
+        parts = expected.split(":")
+        if len(parts) < 2 or parts[0] != "pdf":
+            continue
+        filename = parts[1]
+        # Check if any of the top-K retrieved chunks came from this file.
+        # context_sources is a list of `pdf:FILENAME.pdf:pN` strings.
+        context_sources = sample.get("context_sources", [])
+        hit = any(filename in cs for cs in context_sources)
+        by_source.setdefault(filename, []).append(hit)
+
+    # Per-source precision: hit count / total questions about that source
+    return {
+        filename: (sum(hits) / len(hits)) if hits else 0.0
+        for filename, hits in by_source.items()
+    }
+
+
+def _snapshot(metrics: list[MetricResult], n_samples: int) -> EvalSnapshot:
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
+    out = settings.processed_data_dir.parent / "reports" / f"eval_{ts}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "timestamp_utc": ts,
+        "n_samples": n_samples,
+        "metrics": [{"name": m.name, "score": m.score} for m in metrics],
+    }
+    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    logger.info("Snapshot written to {}", out)
+    return EvalSnapshot(metrics=metrics, n_samples=n_samples, snapshot_path=out)
 
 
 @timed
@@ -162,22 +228,25 @@ def run(dataset_path: Path, metrics: list[str]) -> EvalSnapshot:
         else:
             logger.warning("Metric {} not in RAGAS result columns", name)
 
+    # Add a per-source retrieval metric (custom, not part of RAGAS):
+    # for each eval item with an expected_source, did the chain
+    # actually surface that source in the top-K? Aggregated by PDF.
+    per_source = _per_source_retrieval_precision(items, samples)
+    for source_name, score in sorted(per_source.items()):
+        metric_results.append(
+            MetricResult(name=f"retrieval@{source_name}", score=score)
+        )
+        logger.info("Per-source retrieval precision: {} = {:.3f}", source_name, score)
+
     snapshot = _snapshot(metric_results, len(samples))
     return snapshot
 
 
-def _snapshot(metrics: list[MetricResult], n_samples: int) -> EvalSnapshot:
-    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
-    out = settings.processed_data_dir.parent / "reports" / f"eval_{ts}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "timestamp_utc": ts,
-        "n_samples": n_samples,
-        "metrics": [{"name": m.name, "score": m.score} for m in metrics],
-    }
-    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    logger.info("Snapshot written to {}", out)
-    return EvalSnapshot(metrics=metrics, n_samples=n_samples, snapshot_path=out)
+__all__ = [
+    "EvalSnapshot",
+    "MetricResult",
+    "run",
+]
 
 
 if __name__ == "__main__":

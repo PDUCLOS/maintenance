@@ -419,3 +419,93 @@ class TestLogger:
         setup_logging()
         setup_logging()  # should not raise
         setup_logging()  # third call
+
+
+# ===========================================================================
+# src.eval.ragas_runner
+# ===========================================================================
+
+class TestPerSourceRetrievalPrecision:
+    """Custom metric: per-PDF retrieval precision based on expected_source."""
+
+    def test_perfect_match(self):
+        from src.eval.ragas_runner import _per_source_retrieval_precision
+        items = [
+            {"question": "q1", "expected_source": "pdf:foo.pdf:p1"},
+            {"question": "q2", "expected_source": "pdf:foo.pdf:p2"},
+        ]
+        samples = [
+            {"context_sources": ["pdf:foo.pdf:p1", "pdf:bar.pdf:p1"]},
+            {"context_sources": ["pdf:foo.pdf:p2"]},
+        ]
+        result = _per_source_retrieval_precision(items, samples)
+        assert result == {"foo.pdf": 1.0}
+
+    def test_zero_match(self):
+        from src.eval.ragas_runner import _per_source_retrieval_precision
+        items = [{"question": "q1", "expected_source": "pdf:foo.pdf:p1"}]
+        samples = [{"context_sources": ["pdf:bar.pdf:p1"]}]
+        result = _per_source_retrieval_precision(items, samples)
+        assert result == {"foo.pdf": 0.0}
+
+    def test_partial_match(self):
+        from src.eval.ragas_runner import _per_source_retrieval_precision
+        items = [
+            {"question": "q1", "expected_source": "pdf:foo.pdf:p1"},
+            {"question": "q2", "expected_source": "pdf:foo.pdf:p2"},
+            {"question": "q3", "expected_source": "pdf:foo.pdf:p3"},
+        ]
+        samples = [
+            {"context_sources": ["pdf:foo.pdf:p1"]},   # hit
+            {"context_sources": ["pdf:bar.pdf:p1"]},   # miss
+            {"context_sources": ["pdf:foo.pdf:p3"]},   # hit
+        ]
+        result = _per_source_retrieval_precision(items, samples)
+        assert result == {"foo.pdf": 2/3}
+
+    def test_items_without_expected_source_are_skipped(self):
+        from src.eval.ragas_runner import _per_source_retrieval_precision
+        items = [
+            {"question": "q1"},  # no expected_source
+            {"question": "q2", "expected_source": "pdf:foo.pdf:p1"},
+        ]
+        samples = [
+            {"context_sources": ["pdf:foo.pdf:p1"]},
+            {"context_sources": ["pdf:foo.pdf:p1"]},
+        ]
+        result = _per_source_retrieval_precision(items, samples)
+        # q1 is skipped, q2 counts as a hit for foo.pdf
+        assert result == {"foo.pdf": 1.0}
+
+    def test_multiple_pdfs(self):
+        from src.eval.ragas_runner import _per_source_retrieval_precision
+        items = [
+            {"question": "q1", "expected_source": "pdf:foo.pdf:p1"},
+            {"question": "q2", "expected_source": "pdf:bar.pdf:p1"},
+            {"question": "q3", "expected_source": "pdf:foo.pdf:p2"},
+        ]
+        samples = [
+            {"context_sources": ["pdf:foo.pdf:p1"]},   # hit for foo
+            {"context_sources": ["pdf:bar.pdf:p1"]},   # hit for bar
+            {"context_sources": ["pdf:baz.pdf:p1"]},   # miss for foo
+        ]
+        result = _per_source_retrieval_precision(items, samples)
+        assert result == {"foo.pdf": 0.5, "bar.pdf": 1.0}
+
+    def test_empty_input(self):
+        from src.eval.ragas_runner import _per_source_retrieval_precision
+        assert _per_source_retrieval_precision([], []) == {}
+
+    def test_invalid_expected_source_format_skipped(self):
+        from src.eval.ragas_runner import _per_source_retrieval_precision
+        items = [
+            {"question": "q1", "expected_source": "not-a-pdf-string"},
+            {"question": "q2", "expected_source": "pdf:foo.pdf:p1"},
+        ]
+        samples = [
+            {"context_sources": ["pdf:foo.pdf:p1"]},
+            {"context_sources": ["pdf:foo.pdf:p1"]},
+        ]
+        result = _per_source_retrieval_precision(items, samples)
+        # Only q2 counts (q1 has invalid format)
+        assert result == {"foo.pdf": 1.0}
