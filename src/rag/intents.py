@@ -3,10 +3,9 @@
 The copilot can answer many kinds of questions, but a user who doesn't
 know the corpus may not know what to ask. The intent catalogue gives the
 UI a small set of pre-defined question templates ("intents") with
-minimal parameter fields. The user picks an intent, fills 1-3 fields,
-and the UI generates a clean, well-formed question — much more
-reliable than free-form typing for the data the corpus actually
-contains.
+minimal parameter fields. The user picks an intent, fills 1-2 fields,
+and the UI generates a clean, well-formed question — much more reliable
+than free-form typing for the data the corpus actually contains.
 
 This module is pure data + helpers. It has NO dependency on LangChain,
 Streamlit, or any UI library. Both `src/ui/streamlit_app.py` and
@@ -16,7 +15,7 @@ Adding a new intent
 --------------------
 Just add an entry to `INTENTS` with:
   - key (slug used in URLs / config)
-  - category (CMAPSS_FACTUAL, CMAPSS_AGENT, INDUSTRIAL, OUT_OF_SCOPE)
+  - category (one of the `Category` enum values)
   - label (UI display name)
   - description (UI helper text)
   - fields (ordered list of FieldDef with name/label/options/required)
@@ -24,6 +23,16 @@ Just add an entry to `INTENTS` with:
 
 The UI renders the form fields, validates the required ones, and calls
 `build_question(intent_key, **values)` to get the final question.
+
+Categories
+---------
+  - LOAD_RATING   — load / capacity questions (C, C0, fatigue life)
+  - LUBRICATION   — grease, oil, lubrication intervals
+  - MOUNTING      — installation, alignment, fits
+  - DIAGNOSIS     — vibration, noise, temperature monitoring
+  - FAILURE       — wear modes, contamination, expected life
+  - FREE          — free-form question on any topic
+  - OUT_OF_SCOPE  — adversarial / test questions that should be refused
 """
 
 from __future__ import annotations
@@ -36,11 +45,13 @@ from typing import Any
 class Category(str, Enum):
     """Coarse category for the intent. Used for grouping in the UI."""
 
-    CMAPSS_FACTUAL = "CMAPSS — factual"
-    CMAPSS_REASONING = "CMAPSS — reasoning"
-    CMAPSS_AGENT = "CMAPSS — agent tool calling"
-    INDUSTRIAL = "Industrial catalogue (Schaeffler / SKF)"
-    OUT_OF_SCOPE = "Out of scope (test)"
+    LOAD_RATING = "Capacité de charge & durée de vie"
+    LUBRICATION = "Lubrification & graissage"
+    MOUNTING = "Montage & ajustements"
+    DIAGNOSIS = "Diagnostic & surveillance"
+    FAILURE = "Modes de défaillance"
+    FREE = "Question libre sur les catalogues"
+    OUT_OF_SCOPE = "Hors-scope (test)"
 
     @classmethod
     def display(cls, value: Category | str) -> str:
@@ -50,10 +61,43 @@ class Category(str, Enum):
         return str(value)
 
 
-# Catalogue of CMAPSS subsets and sensor IDs (used in the form widgets).
-CMAPSS_SUBSETS: tuple[str, ...] = ("FD001", "FD002", "FD003", "FD004")
-CMAPSS_SENSORS: tuple[str, ...] = tuple(f"sensor_{i:02d}" for i in range(1, 22))
-SENSOR_LABEL = "Capteur (1-21)"
+# Catalogue of common bearing topics — used as dropdown options in the
+# UI for the "free question" intent. Helps the user craft a query
+# without typing from scratch.
+TOPICS: tuple[tuple[str, str], ...] = (
+    ("ball bearing load rating", "Capacité de charge d'un roulement à billes"),
+    ("roller bearing load rating", "Capacité de charge d'un roulement à rouleaux"),
+    ("fatigue life", "Durée de vie en fatigue (L10)"),
+    ("static load", "Charge statique (C0)"),
+    ("dynamic load", "Charge dynamique (C)"),
+    ("lubrication grease", "Graissage (graisse)"),
+    ("lubrication oil", "Lubrification (huile)"),
+    ("re-lubrication interval", "Intervalle de regraissage"),
+    ("mounting procedure", "Procédure de montage"),
+    ("dismounting", "Démontage"),
+    ("alignment", "Alignement"),
+    ("fits and tolerances", "Ajustements & tolérances"),
+    ("sealing", "Étanchéité"),
+    ("vibration monitoring", "Surveillance vibratoire"),
+    ("acoustic monitoring", "Surveillance acoustique"),
+    ("temperature limits", "Limites de température"),
+    ("contamination", "Contamination"),
+    ("wear modes", "Modes d'usure"),
+    ("spalling", "Écaillage"),
+    ("fatigue pitting", "Pit de fatigue"),
+    ("false brinelling", "Faux-brinnelling"),
+    ("creep", "Fluage"),
+    ("misalignment diagnosis", "Diagnostic de désalignement"),
+    ("lubricant selection", "Choix du lubrifiant"),
+    ("bearing storage", "Stockage des roulements"),
+)
+
+DOCUMENT_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("SKF", "SKF (tous catalogues)"),
+    ("Schaeffler INA FAG", "Schaeffler (INA / FAG)"),
+    ("NTN-SNR", "NTN-SNR (roulements & diagnostic)"),
+    ("any", "N'importe lequel (recherche large)"),
+)
 
 
 @dataclass(frozen=True)
@@ -106,131 +150,136 @@ class Intent:
 
 
 # ---------------------------------------------------------------------------
+# Reusable field definitions
+# ---------------------------------------------------------------------------
+
+_TOPIC_FIELD = FieldDef(
+    name="topic",
+    label="Sujet",
+    options=TOPICS,
+    default="ball bearing load rating",
+)
+_TOPIC_FREE_FIELD = FieldDef(
+    name="topic",
+    label="Sujet (tu peux aussi taper un mot-clé)",
+    options=TOPICS,
+    required=False,
+    placeholder="Ex: 'spalling', 'grease interval', 'SKF Explorer'",
+)
+_DOC_FIELD = FieldDef(
+    name="document",
+    label="Source préférée",
+    options=DOCUMENT_OPTIONS,
+    default="any",
+)
+
+
+# ---------------------------------------------------------------------------
 # The intent catalogue
 # ---------------------------------------------------------------------------
 
-# Field definitions reused across intents
-_SUBSET_FIELD = FieldDef(
-    name="subset",
-    label="Subset CMAPSS",
-    options=((s, s) for s in CMAPSS_SUBSETS),
-    default="FD001",
-)
-_SENSOR_FIELD = FieldDef(
-    name="sensor",
-    label="Capteur (sensor_01 → sensor_21)",
-    options=((s, s) for s in CMAPSS_SENSORS),
-    default="sensor_11",
-)
-_CYCLE_FIELD = FieldDef(
-    name="cycle",
-    label="Cycle exact",
-    kind="number",
-    default="150",
-    min_value=1,
-    max_value=400,
-    placeholder="Ex: 150",
-)
-
-
 INTENTS: tuple[Intent, ...] = (
-    # --- CMAPSS — factual (RAG sur le texte sérialisé) ---
+    # --- LOAD_RATING (capacity & life) ---
     Intent(
-        key="cmapss_unit_count",
-        category=Category.CMAPSS_FACTUAL,
-        label="Combien de moteurs dans un subset ?",
-        description="Statistique de base : nombre d'unités dans le training set.",
-        icon="🔢",
-        fields=(_SUBSET_FIELD,),
-        question_template="How many turbofan engines are in the {subset} training set?",
+        key="load_basic_dynamic",
+        category=Category.LOAD_RATING,
+        label="Capacité de charge dynamique de base (C)",
+        description="Définition, mode de calcul, facteurs d'ajustement.",
+        icon="⚙️",
+        fields=(_TOPIC_FIELD,),
+        question_template="What is the basic dynamic load rating (C) and how is it used to size a bearing?",
     ),
     Intent(
-        key="cmapss_max_cycles",
-        category=Category.CMAPSS_FACTUAL,
-        label="Nombre max de cycles (par unité) dans un subset",
-        description="Durée de vie max enregistrée pour une unité du subset.",
-        icon="🔢",
-        fields=(_SUBSET_FIELD,),
-        question_template="What is the maximum number of cycles observed for any unit in {subset}?",
-    ),
-    Intent(
-        key="cmapss_sensor_mean",
-        category=Category.CMAPSS_FACTUAL,
-        label="Moyenne d'un capteur (tous cycles)",
-        description="Moyenne arithmétique d'un capteur sur l'ensemble du subset.",
-        icon="📊",
-        fields=(_SUBSET_FIELD, _SENSOR_FIELD),
-        question_template="What is the mean of {sensor} across all cycles in {subset}?",
+        key="load_fatigue_life",
+        category=Category.LOAD_RATING,
+        label="Durée de vie en fatigue (L10)",
+        description="Formule L10 = (C/P)^p, facteurs correctifs (température, fiabilité, lubrification).",
+        icon="📐",
+        fields=(_TOPIC_FIELD,),
+        question_template="How is the rating life (L10) of a rolling bearing calculated?",
     ),
 
-    # --- CMAPSS — reasoning (trend) ---
+    # --- LUBRICATION ---
     Intent(
-        key="cmapss_sensor_trend",
-        category=Category.CMAPSS_REASONING,
-        label="Tendance d'un capteur (augmente / diminue / stable)",
-        description="Le capteur monte, descend, ou reste stable avec l'usure ?",
+        key="lubricant_selection",
+        category=Category.LUBRICATION,
+        label="Choix du lubrifiant (graisse ou huile)",
+        description="Critères : température, vitesse, charge, environnement.",
+        icon="🛢️",
+        fields=(_TOPIC_FIELD, _DOC_FIELD),
+        question_template="How do I select a lubricant (grease or oil) for a {topic}?",
+    ),
+    Intent(
+        key="re_lubrication_interval",
+        category=Category.LUBRICATION,
+        label="Intervalle de regraissage",
+        description="Recommandations SKF / Schaeffler selon conditions d'opération.",
+        icon="⏱️",
+        fields=(_TOPIC_FIELD,),
+        question_template="What is the recommended re-lubrication interval for a {topic}?",
+    ),
+
+    # --- MOUNTING ---
+    Intent(
+        key="mounting_procedure",
+        category=Category.MOUNTING,
+        label="Procédure de montage / démontage",
+        description="Outillage, chauffage, ajustements serrés / glissants.",
+        icon="🔧",
+        fields=(_TOPIC_FIELD, _DOC_FIELD),
+        question_template="What is the recommended procedure to mount a {topic}?",
+    ),
+
+    # --- DIAGNOSIS ---
+    Intent(
+        key="vibration_diagnosis",
+        category=Category.DIAGNOSIS,
+        label="Diagnostic vibratoire d'un roulement",
+        description="Fréquences caractéristiques, FFT, seuils de sévérité.",
         icon="📈",
-        fields=(_SUBSET_FIELD, _SENSOR_FIELD),
-        question_template=(
-            "Does {sensor} tend to increase, decrease, or stay stable "
-            "as the engine degrades in {subset}?"
-        ),
+        fields=(_TOPIC_FIELD,),
+        question_template="How do I diagnose a bearing defect through vibration analysis?",
+    ),
+    Intent(
+        key="temperature_limits",
+        category=Category.DIAGNOSIS,
+        label="Limites de température de fonctionnement",
+        description="Plage normale, alerte, alarme selon lubrifiant et type.",
+        icon="🌡️",
+        fields=(_TOPIC_FIELD,),
+        question_template="What are the operating temperature limits for a {topic}?",
     ),
 
-    # --- CMAPSS — multi-hop (capteur à un cycle précis) ---
+    # --- FAILURE ---
     Intent(
-        key="cmapss_sensor_at_cycle",
-        category=Category.CMAPSS_REASONING,
-        label="Valeur moyenne d'un capteur à un cycle précis",
-        description="Moyenne du capteur parmi toutes les unités à ce cycle exact.",
-        icon="🎯",
-        fields=(_SUBSET_FIELD, _SENSOR_FIELD, _CYCLE_FIELD),
-        question_template=(
-            "For {subset}, at cycle {cycle}, what is the mean of {sensor}?"
-        ),
+        key="failure_modes",
+        category=Category.FAILURE,
+        label="Modes de défaillance courants",
+        description="Fatigue, contamination, lubrification, faux-brinnelling, échauffement.",
+        icon="💥",
+        fields=(_TOPIC_FIELD,),
+        question_template="What are the most common failure modes for a {topic}?",
     ),
 
-    # --- CMAPSS — agent tool calling (DSL fermé) ---
+    # --- FREE ---
     Intent(
-        key="cmapss_mean_rul",
-        category=Category.CMAPSS_AGENT,
-        label="Mean RUL (Remaining Useful Life)",
-        description="RUL moyen du subset (nécessite l'agent avec tool calling).",
-        icon="🤖",
-        fields=(_SUBSET_FIELD,),
-        question_template="What is the mean RUL in {subset}?",
-    ),
-    Intent(
-        key="cmapss_min_max_sensor",
-        category=Category.CMAPSS_AGENT,
-        label="Min et max d'un capteur",
-        description="Plage de variation d'un capteur dans le subset.",
-        icon="🤖",
-        fields=(_SUBSET_FIELD, _SENSOR_FIELD),
-        question_template=(
-            "What is the minimum and maximum of {sensor} in {subset}?"
-        ),
-    ),
-
-    # --- Industrial catalogue (Schaeffler / SKF) ---
-    Intent(
-        key="industrial_ask",
-        category=Category.INDUSTRIAL,
-        label="Question sur les catalogues Schaeffler / SKF",
-        description="Pose une question libre sur les roulements, montage, lubrification, etc.",
+        key="free_question",
+        category=Category.FREE,
+        label="Question libre sur les catalogues",
+        description="Pose n'importe quelle question sur les roulements, lubrification, montage, etc.",
         icon="📚",
         fields=(
             FieldDef(
                 name="topic",
                 label="Sujet (libre, en anglais de préférence)",
                 kind="text",
-                placeholder="Ex: 'ball bearing load rating', 'FAG mounting procedure', 'SKF sealing'",
+                placeholder="Ex: 'FAG self-aligning bearing', 'SKF grease LGEP 2'",
             ),
         ),
-        question_template="What does the documentation say about {topic}?",
+        question_template="What does the catalogue documentation say about {topic}?",
     ),
 
-    # --- Out of scope (test) ---
+    # --- OUT_OF_SCOPE (test) ---
     Intent(
         key="out_of_scope",
         category=Category.OUT_OF_SCOPE,
@@ -272,9 +321,9 @@ def intents_by_category() -> dict[str, list[Intent]]:
 
 
 __all__ = [
-    "CMAPSS_SENSORS",
-    "CMAPSS_SUBSETS",
+    "DOCUMENT_OPTIONS",
     "INTENTS",
+    "TOPICS",
     "Category",
     "FieldDef",
     "Intent",

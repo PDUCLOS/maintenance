@@ -75,6 +75,6 @@ dans le corpus documentaire aussi, pas seulement comme dataset pandas.
 
 ## 4. Prochaines étapes techniques (hors scope acquisition)
 
-Retirer CMAPSS du pipeline d'ingestion (`agent.py`, `chunker.py`, `cmapss_loader.py`)
-et brancher ce nouveau corpus reste une tâche séparée, non commencée — cette session a
+Brancher ce nouveau corpus sur le pipeline d'ingestion RAG (loader + chunker +
+collection ChromaDB) reste une tâche séparée, non commencée — cette session a
 couvert uniquement l'acquisition et la vérification des données brutes.

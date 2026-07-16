@@ -17,12 +17,11 @@ from datetime import date
 from pathlib import Path
 
 from docx import Document
-from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from docx.shared import Pt, RGBColor, Cm, Inches
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt, RGBColor
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = PROJECT_ROOT / "docs" / "PROJECT_OVERVIEW.docx"
@@ -214,8 +213,8 @@ def build() -> None:
         headers=["Metric", "Value"],
         rows=[
             ["Project type", "Portfolio (LLM/RAG/GenAI in production)"],
-            ["Domain", "Industrial maintenance, turbofan predictive maintenance"],
-            ["Data sources", "NASA CMAPSS (4 datasets, 45 MB) + 7 Schaeffler/SKF catalogues (135 MB, 4 343 pages)"],
+            ["Domain", "Industrial maintenance — rolling bearings (Schaeffler, SKF, NTN-SNR catalogues)"],
+            ["Data sources", "PDF catalogues: Schaeffler (INA/FAG), SKF, NTN-SNR (~5 000 pages, ~150 MB)"],
             ["Stack", "Python 3.12 · MLX · Qwen2.5-7B · LangChain v0.3 · ChromaDB · FastAPI · Streamlit · RAGAS"],
             ["Hardware target", "Apple Silicon (MacBook Pro M5 Pro, Metal GPU)"],
             ["Status", "Build fonctionnel, vérifié end-to-end sur M5 Pro"],
@@ -234,10 +233,9 @@ def build() -> None:
     add_paragraph(
         doc,
         "Industrial Knowledge Copilot est un système de Retrieval-Augmented Generation "
-        "(RAG) qui répond à des questions techniques sur la maintenance industrielle. "
-        "Il combine (1) de la recherche documentaire sur 4 343 pages de catalogues "
-        "Schaeffler et SKF et la documentation technique NASA CMAPSS, (2) un agent "
-        "ReAct avec tool calling Python sur un DataFrame pandas, et (3) un LLM local "
+        "(RAG) qui répond à des questions techniques sur la maintenance des "
+        "roulements. Il combine (1) de la recherche documentaire sur ~5 000 pages "
+        "de catalogues Schaeffler (INA/FAG), SKF et NTN-SNR, et (2) un LLM local "
         "Qwen2.5-7B-Instruct quantizé 4-bit via Apple MLX, sans aucune dépendance cloud.",
     )
     add_paragraph(
@@ -300,29 +298,31 @@ def build() -> None:
     # ========================================================================
     # 3. USE CASE
     # ========================================================================
-    add_heading(doc, "3. Cas d'usage : maintenance prédictive", level=1)
+    add_heading(doc, "3. Cas d'usage : maintenance des roulements", level=1)
     add_paragraph(
         doc,
-        "Le cas d'usage retenu est la maintenance prédictive de turbofans, basé "
-        "sur le dataset public NASA CMAPSS (Commercial Modular Aero-Propulsion "
-        "System Simulation). CMAPSS contient les relevés de 21 capteurs de 100 à "
-        "260 moteurs, de la mise en service jusqu'à la panne, dans 4 conditions "
-        "opératoires et modes de故障 distincts (FD001 à FD004).",
+        "Le cas d'usage retenu est la maintenance des roulements à éléments "
+        "roulants (rolling-element bearings), basé sur ~5 000 pages de catalogues "
+        "techniques Schaeffler (INA/FAG), SKF et NTN-SNR. Ces catalogues couvrent "
+        "capacité de charge (C, C0, L10), lubrification (graisse, huile, "
+        "intervalles de regraissage), procédures de montage / démontage, "
+        "diagnostic vibratoire, modes de défaillance et limites de température.",
     )
     add_paragraph(
         doc,
-        "Pourquoi CMAPSS plutôt que les autres options évaluées :",
+        "Pourquoi ce focus plutôt que des options plus larges (météo, cuisine, "
+        "généraliste) :",
     )
-    add_bullet(doc, "Données publiques, propres, normalisées (26 colonnes cohérentes)")
-    add_bullet(doc, "Couvre le sensor naming, le RUL, les conditions opérationnelles — aligné avec mon ADN Carrier HVAC / DEXIS BFC industriel")
-    add_bullet(doc, "Permet de combiner RAG classique ET agent avec tool calling Python sur DataFrame — double compétence visible en entretien")
-    add_bullet(doc, "Possibilité d'enrichir avec 7 catalogues Schaeffler/SKF (4 343 pages) pour montrer une RAG multi-source")
+    add_bullet(doc, "Domaine technique : vocabulaire contrôlé, sources autoritatives (constructeurs)")
+    add_bullet(doc, "Cas d'usage industriel concret : un ingénieur maintenance peut vraiment utiliser l'outil")
+    add_bullet(doc, "Réponses vérifiables : chaque réponse cite le PDF source et la page")
+    add_bullet(doc, "Multilingue (FR + EN) : le miroir de langue est testé en permanence par le smoke test")
 
     add_heading(doc, "Pourquoi Qwen2.5-7B plutôt que Mistral-7B (A/B test mesuré)", level=2)
     add_paragraph(
         doc,
         "Avant de figer le choix du LLM, un A/B test a été mené sur le même harnais "
-        "ReAct AgentExecutor avec 5 questions quantitatives CMAPSS :",
+        "ReAct AgentExecutor avec 5 questions quantitatives :",
     )
     add_titled_table(
         doc,
@@ -361,7 +361,7 @@ def build() -> None:
         doc,
         headers=["Pipeline", "Fréquence", "Latence cible", "But"],
         rows=[
-            ["Ingestion", "One-shot par rebuild", "Minutes", "Construire l'index vectoriel à partir de CMAPSS + 7 PDFs"],
+            ["Ingestion", "One-shot par rebuild", "Minutes", "Construire l'index vectoriel à partir des catalogues PDF"],
             ["Requête", "Par question utilisateur", "< 6 s end-to-end", "Répondre en citant les sources"],
             ["Évaluation", "À chaque release", "~5 min pour 30 items", "Mesurer la qualité avec RAGAS, snapshotter"],
         ],
@@ -427,8 +427,8 @@ def build() -> None:
         doc,
         headers=["Champ", "Type", "Description"],
         rows=[
-            ["ids", "list[str]", "Identifiant unique du chunk (ex: cmapss:FD001:0)"],
-            ["embeddings", "list[list[float]]", "Vecteur 384-dim (bge-small-en-v1.5)"],
+            ["ids", "list[str]", "Identifiant unique du chunk (ex: pdf:schaeffler-gl1.pdf:p12)"],
+            ["embeddings", "list[list[float]]", "Vecteur 1024-dim (BAAI/bge-m3)"],
             ["documents", "list[str]", "Texte complet du chunk (markdown)"],
             ["metadatas", "list[dict]", "Métadonnées structurées (voir ci-dessous)"],
         ],
@@ -440,13 +440,12 @@ def build() -> None:
         doc,
         headers=["Clé", "Type", "Source", "Exemple"],
         rows=[
-            ["source", "str", "toutes", "cmapss:FD001 / pdf:schaeffler-gl1-large-size-bearings.pdf"],
-            ["type", "str", "toutes", "doc / dataset / pdf"],
-            ["subset", "str", "CMAPSS", "FD001"],
-            ["chunk_id", "str", "toutes", "cmapss:FD001:0 (même valeur que l'id)"],
-            ["chunk_index", "str", "toutes", "0, 1, 2..."],
+            ["source", "str", "toutes", "pdf:schaeffler-gl1-large-size-bearings.pdf"],
+            ["type", "str", "toutes", "pdf"],
             ["file_name", "str", "PDFs", "schaeffler-gl1-large-size-bearings.pdf"],
             ["page", "str", "PDFs", "1, 2, 3... (1-indexed)"],
+            ["chunk_id", "str", "toutes", "pdf:schaeffler-gl1-large-size-bearings.pdf:p12:0 (même valeur que l'id)"],
+            ["chunk_index", "str", "toutes", "0, 1, 2..."],
         ],
         col_widths=[3.0, 2.5, 4.0, 7.5],
     )
@@ -495,14 +494,10 @@ def build() -> None:
     add_heading(doc, "6.1 Ingestion (one-shot)", level=2)
     add_code_block(
         doc,
-        """data/raw/cmapss/  +  data/raw/pdf/   (sources)
+        """data/raw/pdf/                                (sources)
         │
         ▼
-   src/ingestion/cmapss_loader.py  →  pd.DataFrame (26 cols × N rows)
    src/ingestion/pdf_loader.py     →  list[PdfPage]  (PyMuPDF)
-        │
-        ▼
-   src/ingestion/pipeline._dataframe_to_text()  →  text markdown per subset
         │
         ▼
    src/ingestion/chunker.recursive_split()        →  list[Chunk]  (500 tok / 50 overlap)
@@ -511,7 +506,7 @@ def build() -> None:
    data/processed/chunks.jsonl                  (audit trail)
         │
         ▼
-   src/rag/embeddings.Embedder.embed(texts)      →  list[list[float]]  (384-dim, MPS)
+   src/rag/embeddings.Embedder.embed(texts)      →  list[list[float]]  (1024-dim, MPS)
         │
         ▼
    src/rag/vectorstore.VectorStore.upsert()      →  HTTP :8001 → Chroma collection""",
@@ -529,7 +524,7 @@ def build() -> None:
    src/api/routes/query.py  →  src.rag.chain.RAGChain.query()
         │
         ▼
-   HybridRetriever.retrieve()      (over-fetch ×3 if reranker enabled)
+   HybridRetriever.retrieve()      (over-fetch x3 if reranker enabled)
         │
         ├── dense  →  Chroma.cosine
         └── BM25   →  in-memory index
@@ -624,8 +619,8 @@ def build() -> None:
 cd industrial-knowledge-copilot
 
 make setup              # venv + ~24 dépendances (~3 min)
-make pull-models        # download Qwen2.5-7B + bge-small (~5 Go, ~30 min)
-make data               # download NASA CMAPSS (~12 Mo)
+make pull-models        # download Qwen2.5-7B + bge-m3 (~9 Go, ~30 min)
+# Drop Schaeffler / SKF / NTN-SNR catalogues in data/raw/pdf/
 make chroma-up          # démarre ChromaDB sur :8001
 
 make ingest             # construit l'index vectoriel (~5 min)

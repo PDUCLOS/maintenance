@@ -10,18 +10,16 @@
 
 The Industrial Knowledge Copilot is a local RAG (Retrieval-Augmented
 Generation) system. It answers natural-language questions about industrial
-maintenance by combining:
+maintenance (rolling bearings) by combining:
 
-1. **Document retrieval** over NASA CMAPSS documentation + technical PDFs
+1. **Document retrieval** over Schaeffler + SKF + NTN-SNR PDF catalogues
    (chunked + embedded in a vector store)
-2. **Tool calling** on a Python pandas DataFrame for quantitative questions
-   (mean RUL, sensor stats, fleet size, etc.)
-3. **A local LLM** (Qwen2.5-7B Instruct, 4-bit MLX-quantized) running on
+2. **A local LLM** (Qwen2.5-7B Instruct, 4-bit MLX-quantized) running on
    Apple Silicon via Apple's MLX framework
 
 All inference is local. No data leaves the machine. The only network
-egress is the one-time download of the NASA CMAPSS dataset and the MLX
-model weights from HuggingFace.
+egress is the one-time download of the MLX model weights from
+HuggingFace (Qwen2.5-7B-Instruct-4bit + BAAI/bge-m3).
 
 ## Why MLX, why Apple Silicon
 
@@ -31,7 +29,10 @@ Metal/Metal Performance Shaders (MPS) integration as of 2026:
 
 - **Qwen2.5-7B Instruct (4-bit)**: ~4.5 GB on disk, ~5 GB RAM at inference,
   2–5 s/query on M-series with Metal
-- **bge-small embeddings (4-bit)**: 33M params, 384-dim, fast on MPS
+- **bge-m3 embeddings** (multilingual, 1024-dim): 568M params, ~4.3 GB on
+  disk. ~22 min to embed 11 399 chunks on M5 Pro with MPS. The multilingual
+  support is what lets us run a French/EN mirror without per-language
+  collections.
 - **No GPU/CPU split**: MLX uses the unified memory of Apple Silicon, so
   we don't have to manage device placement
 
@@ -41,11 +42,12 @@ on non-Apple-Silicon hardware.
 
 ## Why hybrid retrieval (BM25 + dense)
 
-The CMAPSS readme and PDF catalogues are dense prose, but exact-match
-queries on identifiers (`FD001`, `sensor_11`, `unit_5`) are common. Pure
+The PDF catalogues are dense prose, but exact-match queries on bearing
+identifiers (`6205`, `FAG`, `C3`) and dimensions are common. Pure
 embedding retrieval misses those. We combine:
 
-- **Dense retrieval** (sentence-transformers bge-small, cosine) — semantic
+- **Dense retrieval** (sentence-transformers bge-m3, cosine) — semantic,
+  multilingual (one vector space for FR and EN)
 - **Lexical retrieval** (BM25, in-memory) — exact match
 - **Reciprocal Rank Fusion (RRF)** — combines the two rankings without
   requiring score calibration
@@ -56,13 +58,11 @@ embedding retrieval misses those. We combine:
 flowchart LR
     UI[Streamlit UI<br/>:8501] -->|HTTP| API[FastAPI<br/>:8000]
     API -->|invoke| RAG[RAG Chain<br/>LangChain LCEL]
-    RAG -->|embed| EMB[bge-small<br/>MPS]
+    RAG -->|embed| EMB[bge-m3<br/>MPS]
     RAG -->|retrieve| HYB[Hybrid Retriever]
     HYB -->|dense| CHR[(ChromaDB<br/>:8001)]
     HYB -->|BM25| BM25[(In-memory<br/>BM25 index)]
     RAG -->|generate| LLM[Qwen2.5-7B<br/>MLX]
-    RAG -->|tool| TOOL[query_cmapss<br/>pandas]
-    TOOL --> DF[(CMAPSS<br/>DataFrame)]
 ```
 
 ### Why ChromaDB in Docker, MLX on the host
@@ -82,13 +82,11 @@ for CI (Linux) and future cloud-deploy scenarios.
 
 ### Ingestion (one-shot per rebuild)
 
-1. `cmapss_loader.load_train(subset)` → `pandas.DataFrame`
-2. `_dataframe_to_text(df, subset)` → human-readable text block per subset
-3. `pdf_loader.load_pdf(path)` → `list[PdfPage]`
-4. `chunker.build_chunks([...])` → `list[Chunk]`
-5. `embedder.embed([c.text for c in chunks])` → `list[list[float]]`
-6. `vectorstore.upsert(chunks, vectors)` → Chroma collection
-7. `chunks.jsonl` → audit trail on disk
+1. `pdf_loader.load_pdf(path)` → `list[PdfPage]`
+2. `chunker.build_chunks([...])` → `list[Chunk]`
+3. `embedder.embed([c.text for c in chunks])` → `list[list[float]]` (1024-dim, bge-m3)
+4. `vectorstore.upsert(chunks, vectors)` → Chroma collection
+5. `chunks.jsonl` → audit trail on disk
 
 ### Query (per request)
 
@@ -100,7 +98,7 @@ for CI (Linux) and future cloud-deploy scenarios.
 
 ### Evaluation (per release)
 
-1. `make eval-dataset` regenerates 30 Q&A pairs from CMAPSS
+1. `make eval-dataset` regenerates 25 Q&A pairs from the PDF catalogue
 2. `make eval` runs the RAG chain on every question, feeds into RAGAS
 3. RAGAS computes faithfulness, answer_relevancy, context_precision,
    context_recall
@@ -111,7 +109,7 @@ for CI (Linux) and future cloud-deploy scenarios.
 | Decision | Why | When to revisit |
 |----------|-----|-----------------|
 | Qwen2.5-7B (4-bit) | Fast, free, local, best measured ReAct tool-calling reliability (A/B vs Mistral-7B-v0.3, see PLAN.md §8) | If RAGAS faithfulness < 0.7 — try Qwen2.5-14B or Llama-3 8B |
-| bge-small (EN, 33M) | Fast, good EN quality | If multi-lingual PDF support needed — switch to bge-m3 or nomic-embed |
+| bge-m3 (multilingual, 568M, 1024-dim) | Single vector space for FR/EN mirror responses, high retrieval quality | If you only need EN — switch to bge-small-en-v1.5 (33M, 384-dim, ~10× faster reindex) |
 | BM25 in-memory | Cheap, fits < 5k chunks | If collection > 100k chunks — use a persistent BM25 (e.g. pyserini) |
 | Reciprocal Rank Fusion | No score calibration needed | If RAGAS context_precision < 0.7 — try Cross-Encoder reranking |
 | 1 Python tool (closed DSL) | Prevents runaway code | If users need more flexibility — add `query_pandas(operation="...")` whitelist |

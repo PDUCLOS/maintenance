@@ -40,10 +40,9 @@ class Settings(BaseSettings):
 
     # --- LLM (MLX) ----------------------------------------------------------
     # Qwen2.5-7B-Instruct, not Mistral-7B-Instruct-v0.3: A/B tested on the
-    # ReAct agent (5 quantitative CMAPSS questions, same harness) —
-    # Mistral scored 1/3 correct (backtick-wrapped tool names, iteration
-    # -limit exhaustion); Qwen2.5 scored 3/3, 5/5 clean tool invocations,
-    # same 4-bit/7B footprint. See PLAN.md §8.
+    # ReAct agent harness (5 quantitative questions, same 4-bit/7B
+    # footprint) — Mistral scored 2/5 clean tool invocations; Qwen2.5
+    # scored 5/5. See PLAN.md §8.
     mlx_model_repo: str = Field(
         default="mlx-community/Qwen2.5-7B-Instruct-4bit",
         description="HuggingFace repo id for the MLX-quantized LLM.",
@@ -80,7 +79,7 @@ class Settings(BaseSettings):
     # --- ChromaDB -----------------------------------------------------------
     chroma_host: str = Field(default="localhost")
     chroma_port: int = Field(default=8001)
-    chroma_collection: str = Field(default="cmapss_kb")
+    chroma_collection: str = Field(default="bearings_kb")
 
     # --- API / UI -----------------------------------------------------------
     api_host: str = Field(default="0.0.0.0")
@@ -96,7 +95,6 @@ class Settings(BaseSettings):
     eval_dataset_file: Path = Field(
         default=PROJECT_ROOT / "data" / "processed" / "eval_dataset.jsonl"
     )
-    cmapss_dir: Path = Field(default=PROJECT_ROOT / "data" / "raw" / "cmapss")
     pdf_dir: Path = Field(default=PROJECT_ROOT / "data" / "raw" / "pdf")
 
     # --- RAG ----------------------------------------------------------------

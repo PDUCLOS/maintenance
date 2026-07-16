@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # 02_ingest.sh — Run the full ingestion pipeline.
 #
-# Reads NASA CMAPSS + PDFs from data/raw/, chunks, embeds, and upserts into
+# Reads PDFs from data/raw/pdf/, chunks, embeds, and upserts into
 # ChromaDB. Requires:
 #   - make chroma-up
 #   - make pull-models
-#   - data/raw/cmapss/ populated (run 'make data')
+#   - data/raw/pdf/ populated (add Schaeffler / SKF / NTN-SNR catalogues)
 
 set -euo pipefail
 
@@ -20,8 +20,9 @@ fi
 source .venv/bin/activate
 
 # Sanity checks
-if [[ ! -d data/raw/cmapss ]]; then
-    echo ">> ERROR: data/raw/cmapss/ missing. Run 'make data' first." >&2
+if [[ ! -d data/raw/pdf ]] || ! ls data/raw/pdf/*.pdf >/dev/null 2>&1; then
+    echo ">> ERROR: no PDFs found in data/raw/pdf/. Drop Schaeffler / SKF /" >&2
+    echo "         NTN-SNR catalogues there before re-running." >&2
     exit 1
 fi
 

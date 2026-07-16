@@ -10,10 +10,10 @@
         <mxCell id="lane-data" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=14" value="Data sources (gitignored, on host)" vertex="1">
           <mxGeometry height="180" width="1140" x="40" y="80" as="geometry" />
         </mxCell>
-        <mxCell id="dfDqTBevyG8d33AHCCKP-2" edge="1" parent="1" source="cmapss" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="load-cm" value="">
+        <mxCell id="dfDqTBevyG8d33AHCCKP-2" edge="1" parent="1" source="pdf-catalog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="load-cm" value="">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="cmapss" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="NASA CMAPSS&#xa;(train/test/RUL × FD001-004)&#xa;+ readme.txt" vertex="1">
+        <mxCell id="pdf-catalog" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="PDF catalogues&#xa;(Schaeffler, SKF, NTN-SNR)&#xa;~5 000 pages" vertex="1">
           <mxGeometry height="100" width="160" x="80" y="140" as="geometry" />
         </mxCell>
         <mxCell id="pdf" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" value="Technical PDFs&#xa;(Schaeffler, SKF, …)" vertex="1">
@@ -25,7 +25,7 @@
         <mxCell id="lane-ingest" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1f5e1;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=14" value="1. Ingestion (one-shot per rebuild) — src/ingestion/" vertex="1">
           <mxGeometry height="220" width="1140" x="40" y="290" as="geometry" />
         </mxCell>
-        <mxCell id="load-cm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="cmapss_loader.py&#xa;pandas DataFrame&#xa;(26 cols × N rows)" vertex="1">
+        <mxCell id="load-pdf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="pdf_loader.py&#xa;PyMuPDF&#xa;(per page, 1-indexed)" vertex="1">
           <mxGeometry height="80" width="160" x="80" y="350" as="geometry" />
         </mxCell>
         <mxCell id="load-pdf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" value="pdf_loader.py&#xa;PyMuPDF&#xa;list[PdfPage]" vertex="1">
@@ -64,7 +64,7 @@
         <mxCell id="lane-eval" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;fontStyle=1;fontSize=14" value="3. Evaluation (per release) — src/eval/" vertex="1">
           <mxGeometry height="180" width="1140" x="40" y="790" as="geometry" />
         </mxCell>
-        <mxCell id="eval-ds" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="eval_dataset.jsonl&#xa;30 Q&amp;A from CMAPSS&#xa;(deterministic seed=42)" vertex="1">
+        <mxCell id="eval-ds" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="eval_dataset.jsonl&#xa;25 Q&amp;A from PDF catalogue&#xa;(deterministic seed=42)" vertex="1">
           <mxGeometry height="100" width="200" x="80" y="850" as="geometry" />
         </mxCell>
         <mxCell id="ragas" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" value="RAGAS evaluate&#xa;faithfulness / relevancy&#xa;context precision / recall" vertex="1">
@@ -79,13 +79,13 @@
         <mxCell id="bm25" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" value="BM25 index&#xa;(in-memory, rebuilt&#xa;on demand)" vertex="1">
           <mxGeometry height="100" width="180" x="940" y="850" as="geometry" />
         </mxCell>
-        <mxCell id="agent" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" value="Agent (optional)&#xa;query_cmapss tool&#xa;closed DSL → pandas" vertex="1">
+        <mxCell id="agent" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" value="Agent (removed July 2026)&#xa;stub only — RAG chain handles all queries" vertex="1">
           <mxGeometry height="60" width="160" x="720" y="640" as="geometry" />
         </mxCell>
-        <mxCell id="df" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" value="CMAPSS DataFrame&#xa;(in-process, pandas)" vertex="1">
+        <mxCell id="df-removed" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;dashed=1" value="(agent tool removed)" vertex="1">
           <mxGeometry height="50" width="160" x="720" y="720" as="geometry" />
         </mxCell>
-        <mxCell id="e1" edge="1" parent="1" source="cmapss" style="endArrow=classic;html=1;strokeColor=#82b366;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;">
+        <mxCell id="e1" edge="1" parent="1" source="pdf-catalog" style="endArrow=classic;html=1;strokeColor=#82b366;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="160" y="250" as="sourcePoint" />
             <mxPoint x="160" y="350" as="targetPoint" />
@@ -364,7 +364,7 @@
         <mxCell id="hf-cache" value="HuggingFace cache&#xa;~/.cache/huggingface/hub/&#xa;~5 GB (Mistral + bge)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="500" y="140" width="220" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="data-raw" value="data/raw/&#xa;CMAPSS + PDFs" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
+        <mxCell id="data-raw" value="data/raw/pdf/&#xa;Schaeffler + SKF + NTN-SNR" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">
           <mxGeometry x="500" y="280" width="220" height="80" as="geometry" />
         </mxCell>
         <mxCell id="data-proc" value="data/processed/&#xa;chunks.jsonl&#xa;eval_dataset.jsonl" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" vertex="1" parent="1">

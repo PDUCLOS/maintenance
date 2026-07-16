@@ -32,9 +32,8 @@ un même état persistant (ChromaDB) :
 | **Requête** | Par requête utilisateur | < 6 s end-to-end | Répondre à une question en citant ses sources |
 | **Évaluation** | À chaque release | ~5 min pour 30 items | Mesurer la qualité avec RAGAS, snapshotter |
 
-L'agent (tool calling Python sur DataFrame CMAPSS) est une **branche
-optionnelle** du pipeline de requête : activée par toggle dans l'UI quand
-la question demande un calcul quantitatif.
+La chaîne RAG seule (avec retrieval hybride) répond à toutes les questions
+du corpus PDF. Aucun agent tool-calling n'est utilisé dans ce projet.
 
 **Propriétés clés :**
 - **100 % local** — aucune donnée ne quitte la machine
@@ -68,13 +67,13 @@ les chunke, les embed et les upsert dans ChromaDB.
 
 ```
    ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-   │ data/raw/cmapss/ │    │  data/raw/pdf/   │    │  (optionnel)     │
-   │  NASA CMAPSS     │    │  PDF industriels │    │  autre source    │
+   │  data/raw/pdf/   │    │  (optionnel)     │
+   │  PDF industriels │    │  autre source    │
    └────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘
             │ read_csv               │ PyMuPDF               │
             ▼                        ▼                        ▼
    ┌────────────────────────────────────────────────────────────────┐
-   │  src/ingestion/cmapss_loader.py   src/ingestion/pdf_loader.py │
+   │  src/ingestion/pdf_loader.py │
    │  load_train / load_test / load_rul   load_pdf                 │
    │  → pd.DataFrame                   → list[PdfPage]             │
    └────────────────────────┬───────────────────────────────────────┘
@@ -96,8 +95,8 @@ les chunke, les embed et les upsert dans ChromaDB.
               ┌──────────────────────────────┐
               │  src/rag/embeddings.py       │
               │  Embedder.embed(texts)       │
-              │  bge-small + MPS             │
-              │  → list[list[float]] (384d)  │
+              │  bge-m3 + MPS                │
+              │  → list[list[float]] (1024d) │
               └─────────────┬────────────────┘
                             │ align with chunks
                             ▼
@@ -122,24 +121,24 @@ les chunke, les embed et les upsert dans ChromaDB.
 
 | Source | Loader | Format de sortie |
 |--------|--------|------------------|
-| `train_FDxxx.txt` | `cmapss_loader.load_train` | `pd.DataFrame` (26 colonnes, `unit_nr` + `time_cycles` index) |
-| `test_FDxxx.txt` | `cmapss_loader.load_test` | idem |
-| `RUL_FDxxx.txt` | `cmapss_loader.load_rul` | `pd.Series` (RUL par unit_nr) |
+| ~~`train_FDxxx.txt`~~ | ~~retiré~~ | |
+| ~~`test_FDxxx.txt`~~ | ~~retiré~~ | |
+| ~~`RUL_FDxxx.txt`~~ | ~~retiré~~ | |
 | `readme.txt` | `read_text` | str |
 | `*.pdf` | `pdf_loader.load_pdf` (PyMuPDF) | `list[PdfPage]` (1 par page) |
 
-**Garantie d'erreur** : `assert_cmapss_present()` lève `FileNotFoundError`
-avec la liste exacte des fichiers manquants si CMAPSS n'est pas en place.
+**Note** : Le projet n'ingère que les PDF (Schaeffler, SKF, NTN-SNR). Aucun autre format n'est supporté.
+Le pipeline vérifie uniquement la présence d'au moins un PDF dans `data/raw/pdf/`.
 Aucun fallback silencieux vers un dataset de démo.
 
 #### 3.2 Sérialisation des DataFrames en texte
 
-Les DataFrames CMAPSS ne vont pas directement dans un LLM. Ils sont
+Les pages PDF ne vont pas directement dans un LLM. Elles sont
 **textualisés** par `_dataframe_to_text(df, subset)` qui produit un
 résumé structuré en markdown :
 
 ```markdown
-# Subset FD001 — NASA CMAPSS
+# Subset FD001 — Données structurées
 
 - Number of engines: 100
 - Operating conditions: 1 unique regime
@@ -175,7 +174,7 @@ suffit généralement. Pour les PDF, 2-5 chunks par page.
 #### 3.4 Embedding
 
 `Embedder.embed(texts)` avec :
-- Modèle : `bge-small-en-v1.5` (4-bit quantisé, 33M params, 384-dim)
+- Modèle : `bge-m3` (multilingue, 568M params, 1024-dim)
 - Device : MPS (Metal Performance Shaders sur Mac M-series)
 - Batching implicite (sentence-transformers gère)
 - Normalisation L2 → cosine sim ≡ dot product
@@ -231,7 +230,7 @@ Déclenché par chaque message utilisateur dans l'UI. Latence cible :
 
 #### 4.1 Embedding de la requête
 
-`Embedder.embed([question])` → vecteur 384-dim. ~50 ms sur M5 Pro.
+`Embedder.embed([question])` → vecteur 1024-dim. ~50 ms par question sur M5 Pro.
 
 #### 4.2 Retrieval hybride (RRF)
 
@@ -274,7 +273,7 @@ Le prompt système (chargé depuis `system_fr.txt`) inclut la consigne
 #### 4.5 Agent (branche optionnelle)
 
 Si l'UI active "Use agent (with Python tool calling)" :
-- L'agent reçoit un tool `query_cmapss(operation, subset, **params)`
+- L'ancien tool agent ReAct + DSL fermé est maintenant un stub qui lève `NotImplementedError`.
 - Le LLM peut décider d'appeler ce tool avant de répondre
 - Le tool dispatche sur 4 opérations whitelistées :
   - `mean_sensor` (mean of one sensor)
@@ -350,7 +349,7 @@ scores au fil des itérations de tuning.
 |--------|---------|----------------|---------------------|
 | Config | `src/config.py` | Validation pydantic, fail-fast sur non-Apple-Silicon | Unit |
 | Logger | `src/utils/logger.py` | loguru JSON structuré | Unit |
-| CMAPSS loader | `src/ingestion/cmapss_loader.py` | Parse les .txt NASA → DataFrame | Integration |
+| ~~Structured-data loader~~ | ~~retiré~~ | | |
 | PDF loader | `src/ingestion/pdf_loader.py` | PyMuPDF → list[PdfPage] | Integration |
 | Chunker | `src/ingestion/chunker.py` | Recursive split avec overlap | Unit |
 | Pipeline | `src/ingestion/pipeline.py` | Orchestre ingestion complète | Integration |
@@ -359,11 +358,11 @@ scores au fil des itérations de tuning.
 | Hybrid retriever | `src/rag/retriever.py` | RRF(dense, BM25) | Integration |
 | LLM | `src/rag/llm.py` | mlx-lm wrapper → LangChain | Integration |
 | RAG chain | `src/rag/chain.py` | LCEL : retriever → prompt → LLM | Integration |
-| Agent | `src/rag/agent.py` | ReAct + query_cmapss tool (closed DSL) | Integration |
+| Agent | `src/rag/agent.py` | stub (tool réactivable) | — |
 | API main | `src/api/main.py` | FastAPI app + CORS + lifespan | Integration |
 | API routes | `src/api/routes/*.py` | `/query`, `/ingest`, `/eval`, `/health` | Integration |
 | UI | `src/ui/streamlit_app.py` | Chat Streamlit | Manual |
-| Eval dataset | `src/eval/dataset.py` | Génère 30 Q&A depuis CMAPSS | Integration |
+| Eval dataset | `src/eval/dataset.py` | Génère 25 Q&A depuis le catalogue PDF | Integration |
 | RAGAS runner | `src/eval/ragas_runner.py` | Lance RAGAS, snapshot | Integration |
 
 ## 7. Décisions architecturales (ADRs)
@@ -409,7 +408,9 @@ avec Reciprocal Rank Fusion (RRF, k₀=60).
 DataFrame est un avantage pédagogique et fonctionnel. Mais le LLM peut
 générer du code arbitraire → risque d'exécution non maîtrisée.
 
-**Decision** : Un seul tool `query_cmapss(operation, subset, **params)`
+**Decision** : Aucun tool agent n'est utilisé dans ce projet. La chaîne RAG
+seule répond à toutes les questions. Voir `src/rag/agent.py` (stub) pour
+un exemple de ReAct pattern si besoin de le réactiver un jour.
 qui dispatche sur 4 opérations whitelistées. Pas de `eval()`, pas de
 `subprocess`, pas d'imports dynamiques.
 
@@ -431,7 +432,7 @@ monkeypatch + from-import = double-binding).
 - Lancement explicite : `make test-integration` (sur le Mac avec services up)
 - Hardware guard : `settings.assert_apple_silicon()` raise si on n'est
   pas sur M-series — pas de fallback CPU silencieux
-- Data guard : `assert_cmapss_present()` raise si les fichiers manquent
+- Data guard : `load_all_pdfs()` retourne une liste vide si `data/raw/pdf/` est vide
 
 **Consequences** :
 - ✅ CI rapide, pas de faux positifs
@@ -506,7 +507,7 @@ utilisé dans un domaine à haut risque (emploi, santé, justice, etc.).
 | **Refus abusif** (LLM dit "je ne sais pas" trop souvent) | Moyenne | Faible | RAGAS answer_relevancy > 0.75, tests sur les 5 questions out-of-scope |
 | **Prompt injection** (utilisateur manipule le LLM) | Faible | Moyen | Pas d'instruction cachée dans les PDF, prompt système strict, tool whitelisté |
 | **Fuite de données** | Très faible | Élevé | 100 % local, pas d'API cloud, logs sanitizés |
-| **Biais du modèle** (Qwen2.5-7B a des biais) | Moyenne | Faible | Le système est technique, pas génératif d'opinions ; corpus restreint (CMAPSS) |
+| **Biais du modèle** (Qwen2.5-7B a des biais) | Moyenne | Faible | Le système est technique, pas génératif d'opinions ; corpus restreint (PDFs roulements) |
 | **Dérive de qualité** (rebuild Chroma, métriques RAGAS chutent) | Faible | Moyen | CI avec tests d'intégration, snapshot RAGAS par release |
 
 **Process** : à chaque release, on re-run `make eval`, on diff les
@@ -523,7 +524,7 @@ n'importe quelle métrique bloque la release.
 
 | Source | Licence | Volume | Qualité | PII ? |
 |--------|---------|--------|---------|-------|
-| NASA CMAPSS | Public domain (US Gov) | ~45 Mo | Documentée, normalisée, 26 colonnes cohérentes | **Non** |
+| Schaeffler / SKF / NTN-SNR catalogues | Selon le PDF (constructeur) | ~150 Mo | ~5 000 pages, vocabulaire contrôlé | **Oui** (voir `data/raw/pdf/INVENTORY.md`) |
 | NASA readme.txt | Public domain | ~2 Ko | Texte technique, pas de PII | **Non** |
 | Damage Propagation Modeling.pdf | Public domain | ~430 Ko | Papier scientifique | **Non** |
 | PDFs industriels (W3-W4) | Variable, à vérifier par source | ~5-10 Mo | Manuelle | **Non** (catalogues techniques) |

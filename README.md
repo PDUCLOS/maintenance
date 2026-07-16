@@ -1,7 +1,7 @@
 # Industrial Knowledge Copilot
 
-> Local RAG copilot for industrial maintenance knowledge — NASA CMAPSS turbofan
-> degradation data + 7 Schaeffler/SKF technical catalogues, running on Apple
+> Local RAG copilot for industrial maintenance knowledge — rolling-bearing
+> technical catalogues (Schaeffler, SKF, NTN-SNR), running on Apple
 > Silicon with MLX.
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)](.github/workflows/ci.yml)
@@ -16,13 +16,15 @@
 A production-shaped RAG (Retrieval-Augmented Generation) system that answers
 natural-language questions about industrial maintenance. It combines:
 
-- **Document retrieval** over NASA CMAPSS technical documentation and
-  7 industrial PDF catalogues from Schaeffler (INA/FAG) and SKF
-  (4,343 pages total, 135 MB — see [`data/raw/pdf/INVENTORY.md`](data/raw/pdf/INVENTORY.md))
+- **Document retrieval** over Schaeffler (INA/FAG), SKF and NTN-SNR
+  industrial PDF catalogues (~5 000 pages total, ~150 MB — see
+  [`data/raw/pdf/INVENTORY.md`](data/raw/pdf/INVENTORY.md))
 - **Hybrid retrieval** (BM25 + dense embeddings fused with Reciprocal Rank Fusion)
 - **Optional cross-encoder reranker** for top-K precision
-- **Tool calling** on a Python pandas DataFrame for quantitative questions
-  (sensor stats, fleet size, RUL) — **closed DSL**, no arbitrary code execution
+- **Tool calling** removed in July 2026 (was a closed-DSL Python pandas
+  tool-calling agent, dropped in July 2026 when the project pivoted to a
+  100% catalogue focus). The RAG chain
+  alone answers all questions from the PDF corpus.
 - **A local LLM** (Qwen2.5-7B Instruct, 4-bit, MLX-quantized) running on
   Apple Silicon via Apple's MLX framework
 - **RAGAS evaluation** (faithfulness, answer relevancy, context precision,
@@ -41,21 +43,21 @@ production** gap on my CV. The full pitch is in
 ## Quickstart
 
 **Prerequisites:** macOS on Apple Silicon (M1/M2/M3/M4/M5), Python 3.12+,
-Docker Desktop. NASA CMAPSS data downloads directly from
-[data.nasa.gov](https://data.nasa.gov/dataset/cmapss-jet-engine-simulated-data)
-— no account needed.
+Docker Desktop. PDF catalogues are dropped into `data/raw/pdf/` — no
+download step, you bring your own (see [`data/raw/pdf/INVENTORY.md`](data/raw/pdf/INVENTORY.md)
+for the source list and licensing).
 
 ```bash
 git clone https://github.com/PDUCLOS/industrial-knowledge-copilot
 cd industrial-knowledge-copilot
 
 make setup              # create venv, install deps (~2-3 min)
-make pull-models        # download Qwen2.5-7B + bge-small (~5 GB, one time, ~30 min)
-make data               # download NASA CMAPSS (~12 MB compressed, direct from data.nasa.gov)
+make pull-models        # download Qwen2.5-7B + bge-m3 (~9 GB, one time, ~30 min)
+# Drop Schaeffler / SKF / NTN-SNR PDFs into data/raw/pdf/
 make chroma-up          # start ChromaDB in Docker
 
-make ingest             # build the vector index (chunks NASA + 7 PDFs)
-make eval-dataset       # generate 30 deterministic Q&A pairs for RAGAS
+make ingest             # build the vector index (chunks PDFs)
+make eval-dataset       # generate 25 Q&A pairs for RAGAS (from the PDFs)
 
 make api                # start the API on :8000  (terminal 1)
 make ui                 # start the Streamlit UI on :8501  (terminal 2)
@@ -78,14 +80,12 @@ in the sidebar. 10 demo questions ready for the pitch are in
 flowchart LR
     UI[Streamlit UI<br/>:8501<br/>4 tabs] -->|HTTP| API[FastAPI<br/>:8000]
     API -->|invoke| RAG[RAG Chain<br/>LangChain LCEL]
-    RAG -->|embed| EMB[bge-small<br/>MPS]
+    RAG -->|embed| EMB[bge-m3<br/>MPS]
     RAG -->|retrieve| HYB[Hybrid Retriever<br/>RRF]
     HYB -->|dense| CHR[(ChromaDB<br/>:8001)]
     HYB -->|BM25| BM25[(In-memory<br/>BM25 index)]
     HYB -.->|optional| RR[Cross-Encoder<br/>Reranker]
     RAG -->|generate| LLM[Qwen2.5-7B<br/>MLX]
-    RAG -->|tool| TOOL[query_cmapss<br/>pandas DSL]
-    TOOL --> DF[(CMAPSS<br/>DataFrame)]
 ```
 
 Detailed diagrams and trade-offs: [`docs/architecture.md`](docs/architecture.md).
@@ -104,7 +104,7 @@ See `Makefile` for the orchestration.
 | Layer | Choice | Why |
 |-------|--------|-----|
 | LLM | Qwen2.5-7B Instruct (4-bit, MLX) | Local, free, fast on M-series, best ReAct tool-calling reliability in A/B (see PLAN.md §8) |
-| Embeddings | bge-small-en-v1.5 (4-bit, MPS) | 33M params, fast, high-quality EN |
+| Embeddings | bge-m3 (MPS) | 568M params, multilingual (FR/EN), 1024-dim, best quality at the cost of ~20-min reindex |
 | Vector store | ChromaDB 0.5 | Local, simple, sufficient for < 100k chunks |
 | Orchestration | LangChain v0.3 LCEL | Standard market 2026, requested in 80% of JDs |
 | Hybrid retrieval | BM25 + dense (RRF) | Catches exact-match (sensor IDs) that embeddings miss |
@@ -118,7 +118,8 @@ All versions pinned in [`requirements.txt`](requirements.txt).
 ## Evaluation (RAGAS)
 
 We track **faithfulness, answer relevancy, context precision, context
-recall** on a deterministic 30-item Q&A dataset generated from CMAPSS.
+recall** on a deterministic 25-item Q&A dataset generated from the PDF
+catalogue.
 Methodology and tuning levers: [`docs/evaluation.md`](docs/evaluation.md).
 
 ```bash
@@ -139,15 +140,15 @@ make eval             # run RAGAS, snapshot to reports/eval_<UTC>.json
 ```
 src/
 ├── config.py                # pydantic-settings, validates Apple Silicon
-├── ingestion/               # CMAPSS + PDF loaders, chunker, pipeline
+├── ingestion/               # PDF loader, chunker, pipeline
 ├── rag/
-│   ├── embeddings.py        # bge-small + MPS
+│   ├── embeddings.py        # bge-m3 + MPS
 │   ├── vectorstore.py       # ChromaDB HTTP client
 │   ├── retriever.py         # Hybrid (BM25 + dense, RRF)
 │   ├── reranker.py          # Cross-encoder reranker (optional)
 │   ├── llm.py               # MLX-backed Qwen2.5-7B (LangChain-compatible)
 │   ├── chain.py             # LCEL RAG chain
-│   ├── agent.py             # ReAct agent + query_cmapss tool (closed DSL)
+│   ├── agent.py             # stub (agent tool-calling removed in July 2026)
 │   ├── types.py             # shared types (RetrievedChunk)
 │   └── prompts/             # system_fr.txt, system_en.txt, qa_template.py
 ├── api/                     # FastAPI app + /query /ingest /eval /health
@@ -159,8 +160,7 @@ tests/                       # unit + integration (latter skipped on non-Mac)
 docs/                        # architecture, pipeline (IA Act), evaluation, pitch
 docs/diagrams/              # pipeline.drawio (3 pages, editable)
 scripts/                     # 01_setup_mlx, 02_ingest, 03_run_eval, 99_clean, demo_questions
-data/raw/cmapss/            # NASA CMAPSS (gitignored, 14 files, ~45 MB)
-data/raw/pdf/               # 7 Schaeffler + SKF catalogues (gitignored, 135 MB)
+data/raw/pdf/               # Schaeffler + SKF + NTN-SNR catalogues (gitignored, ~150 MB)
 data/raw/pdf/INVENTORY.md   # source URLs, licensing, page counts
 data/processed/             # chunks.jsonl, eval_dataset.jsonl (gitignored)
 reports/                    # RAGAS snapshots (gitignored JSON, immutable)

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# 01_setup_mlx.sh — Download Mistral 7B (MLX) + bge-small embeddings.
+# 01_setup_mlx.sh — Download the MLX LLM (Qwen2.5-7B-Instruct) and the
+# sentence-transformers embedding model (BAAI/bge-m3).
 #
-# One-time download of ~5 GB into the HuggingFace cache.
+# One-time download of ~9 GB into the HuggingFace cache.
 # Apple Silicon only. Run this once after `make setup`.
 
 set -euo pipefail
@@ -22,13 +23,13 @@ if [[ -f .env ]]; then
     set +a
 fi
 
-LLM_REPO="${MLX_MODEL_REPO:-mlx-community/Mistral-7B-Instruct-v0.3-4bit}"
-EMBED_REPO="${MLX_EMBED_REPO:-mlx-community/bge-small-en-v1.5-4bit}"
+LLM_REPO="${MLX_MODEL_REPO:-mlx-community/Qwen2.5-7B-Instruct-4bit}"
+EMBED_REPO="${MLX_EMBED_REPO:-BAAI/bge-m3}"
 
 echo ">> Downloading LLM:    $LLM_REPO"
 echo ">> Downloading embed:  $EMBED_REPO"
 echo "   Cache: $HOME/.cache/huggingface/hub"
-echo "   This is a one-time ~5 GB download. Be patient."
+echo "   This is a one-time ~9 GB download. Be patient."
 echo
 
 if [[ ! -d .venv ]]; then
@@ -50,4 +51,4 @@ print("Done.")
 PY
 
 echo
-echo ">> Models are ready. Next: 'make data' (download NASA CMAPSS), then 'make ingest'."
+echo ">> Models are ready. Next: add PDFs to data/raw/pdf/ then 'make ingest'."

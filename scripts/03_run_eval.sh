@@ -14,7 +14,7 @@ fi
 source .venv/bin/activate
 
 if [[ ! -f data/processed/eval_dataset.jsonl ]]; then
-    echo ">> Eval dataset missing. Generating it (this needs CMAPSS data)..."
+    echo ">> Eval dataset missing. Generating it from PDFs..."
     python -m src.eval.dataset
 fi
 

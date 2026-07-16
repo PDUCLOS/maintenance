@@ -33,7 +33,7 @@ def list_pdfs() -> list[Path]:
     """List PDF files in the configured pdf_dir.
 
     Raises FileNotFoundError if the directory itself does not exist —
-    this is intentional: an empty PDF set is fine (CMAPSS-only mode),
+    this is intentional: an empty PDF set is fine,
     a missing directory is a config error.
     """
     pdf_dir = settings.pdf_dir

@@ -20,20 +20,20 @@ the question/answer pairs. We use it both for **regression detection**
 ## Evaluation dataset
 
 `data/processed/eval_dataset.jsonl` contains **30 Q&A pairs** generated
-deterministically from CMAPSS (random seed = 42):
+deterministically from the PDF catalogue (random seed = 42):
 
 - **10 factual** — "How many engines are in FD001?", "What is the mean of
   sensor_11 across all cycles in FD002?"
 - **10 reasoning** — "Does sensor_X tend to increase or decrease as the
-  engine degrades in FD003?"
-- **5 multi-hop** — "For FD004, at cycle 150, what is the mean of
-  sensor_07?"
+  degradation?"
+- **5 retrieval** — "Which document discusses X?" (filename + page
+  answer; checks the retriever surfaces the right page)
 - **5 out-of-scope** — "What is the phone number of NASA support?" (the
   answer should be "I don't know from the available data.")
 
-The ground-truth answers are computed from the data itself, not written
-by hand, so they stay accurate if we re-run the dataset generation after
-a CMAPSS update.
+The ground-truth answers are extracted from the actual PDF pages, not
+written by hand, so they stay accurate as long as the catalogue
+doesn't change.
 
 ## Workflow
 

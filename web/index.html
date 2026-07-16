@@ -39,7 +39,7 @@
         <h1>A local RAG copilot<br>for industrial maintenance.</h1>
 
         <p class="lead">
-            NASA CMAPSS turbofan data + 4 343 pages of Schaeffler &amp; SKF catalogues.
+            ~5 000 pages of Schaeffler, SKF and NTN-SNR rolling-bearing catalogues.
             Hybrid retrieval (BM25 + dense + cross-encoder reranking), an agent with
             Python tool calling, and a 7B LLM running natively on Apple Silicon via MLX.
             100 % local. No API key. No data egress.
@@ -97,7 +97,7 @@
                 <div class="card-icon" style="background: var(--success-dim); color: var(--success);">✓</div>
                 <div class="card-title">Il répond à</div>
                 <p class="card-text">
-                    <strong>Statistiques sur les données CMAPSS</strong> — combien de moteurs dans un subset,
+                    <strong>Capacité de charge</strong> (C, C0, L10),
                     moyenne d'un capteur, max cycles par unité, etc.<br><br>
                     <strong>Tendances de capteurs</strong> — un capteur augmente, diminue, ou reste stable
                     avec l'usure du moteur.<br><br>
@@ -116,7 +116,7 @@
                     <strong>Prédictions de prix ou de stock</strong> — les données sont
                     techniques, pas commerciales.<br><br>
                     <strong>Code arbitraire</strong> — l'agent a un DSL fermé (7 opérations
-                    whitelistées sur le DataFrame CMAPSS), il n'exécute pas de Python
+                    whitelistées sur les DataFrames internes (mode debug uniquement), il n'exécute pas de Python
                     arbitraire.<br><br>
                     <strong>Décisions critiques sans supervision</strong> — c'est un outil
                     d'aide, pas un système autonome de production.
@@ -162,7 +162,7 @@
                 <div class="card-icon">🤖</div>
                 <div class="card-title">Agent with Python tool calling</div>
                 <p class="card-text">
-                    A ReAct agent that can call <code>query_cmapss</code> on a pandas
+                    Pas d'agent tool-calling (le tool 'pandas sur DataFrame' a été retiré en juillet 2026 — le RAG seul répond à tout).
                     DataFrame. Closed DSL — 7 whitelisted operations, no arbitrary
                     code execution, clean error messages on bad input. 5/5 tool
                     invocations on the A/B test harness.
@@ -227,10 +227,10 @@
         </div>
 
         <h3 class="mt-6" style="font-size: var(--text-lg); margin-bottom: var(--space-3);">Ingestion (one-shot)</h3>
-<div class="flow-diagram">   NASA CMAPSS  (.txt)         <span class="accent">Schaeffler + SKF</span>  (.pdf)
+<div class="flow-diagram">                    <span class="accent">Schaeffler + SKF + NTN-SNR</span>  (.pdf)
         │                                  │
         ▼                                  ▼
-   <span class="accent">cmapss_loader</span>  (pandas)         <span class="accent">pdf_loader</span>  (PyMuPDF)
+   <span class="accent">pdf_loader</span>  (PyMuPDF)
         │                                  │
         └──────────────┬───────────────────┘
                        ▼
@@ -342,7 +342,7 @@
             <div class="section-eyebrow">Decision by measurement</div>
             <h2 class="section-title">A/B test: Qwen2.5 vs Mistral</h2>
             <p class="section-subtitle">
-                Same harness, same 5 quantitative CMAPSS questions, only the model changed.
+                Same harness, same 5 quantitative questions, only the model changed.
                 Before the A/B, two real code bugs (stop sequences, return_intermediate_steps)
                 were fixed — otherwise the test would have masked bugs behind a model change.
             </p>
@@ -380,7 +380,7 @@
 
         <div class="callout mt-6">
             <strong>Why Mistral failed:</strong> it wrapped the tool name in markdown
-            backticks (<code>`query_cmapss`</code>), breaking LangChain's exact-match lookup,
+            backticks in tool names, breaking LangChain's exact-match lookup,
             and could loop until iteration limit. Qwen2.5 produced clean invocations
             in 5 out of 5 cases, with no overhead (same 7B size, same RAM footprint).
         </div>
@@ -508,7 +508,7 @@ git clone https://github.com/PDUCLOS/industrial-knowledge-copilot
 cd industrial-knowledge-copilot
 make setup              <span class="c"># venv + ~24 packages</span>
 make pull-models        <span class="c"># Qwen2.5-7B + bge-small (~5 GB, ~30 min)</span>
-make data               <span class="c"># NASA CMAPSS (~12 MB)</span>
+# Drop Schaeffler / SKF / NTN-SNR PDFs into data/raw/pdf/
 make chroma-up          <span class="c"># ChromaDB on :8001</span>
 
 <span class="c"># 2. Build the index (5 min on first run)</span>

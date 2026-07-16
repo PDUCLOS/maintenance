@@ -17,28 +17,28 @@ Typical migration workflow (e.g. bge-small 384-dim → bge-m3 1024-dim):
 
     # 1. Inspect current state
     python scripts/manage_collection.py list
-    python scripts/manage_collection.py info cmapss_kb
+    python scripts/manage_collection.py info bearings_kb
 
     # 2. Create a new collection alongside (your old one stays)
-    python scripts/manage_collection.py new cmapss_kb_bge_m3
-    python scripts/manage_collection.py use cmapss_kb_bge_m3
+    python scripts/manage_collection.py new bearings_kb_v2
+    python scripts/manage_collection.py use bearings_kb_v2
 
     # 3. Re-ingest (writes to the new collection)
     make ingest
 
     # 4. Verify, then drop the old one (irreversible!)
-    python scripts/manage_collection.py info cmapss_kb_bge_m3
-    python scripts/manage_collection.py drop cmapss_kb    # only after you've validated
+    python scripts/manage_collection.py info bearings_kb_v2
+    python scripts/manage_collection.py drop bearings_kb    # only after you've validated
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 import chromadb
+
 # Chroma 0.5 raised NotFoundError; Chroma 0.6+ renames it to
 # InvalidCollectionException. We accept both for forward-compat.
 try:
@@ -102,7 +102,7 @@ def cmd_list(_args: argparse.Namespace) -> int:
         try:
             c = client.get_collection(name)
             n = c.count()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             n = f"err: {e}"
         # Chroma 0.6+ removed the Collection.dimension attribute. We
         # infer the dim from the first embedding returned by peek().
@@ -113,7 +113,7 @@ def cmd_list(_args: argparse.Namespace) -> int:
                 dim = len(embeddings[0])
             else:
                 dim = "0 (empty)"
-        except Exception:  # noqa: BLE001
+        except Exception:
             dim = "?"
         rows.append([marker, name, str(dim), str(n)])
     _print_table(
@@ -134,7 +134,7 @@ def cmd_info(args: argparse.Namespace) -> int:
         print(f"❌ Collection '{name}' not found.")
         print("   Use 'list' to see available collections.")
         return 1
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"❌ Cannot reach ChromaDB: {e}")
         return 1
     n = coll.count()
@@ -161,7 +161,7 @@ def cmd_new(args: argparse.Namespace) -> int:
         return 1
     except NotFoundError:
         pass  # good, doesn't exist
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"❌ Cannot reach ChromaDB: {e}")
         return 1
 
@@ -170,13 +170,13 @@ def cmd_new(args: argparse.Namespace) -> int:
         metadata={"hnsw:space": "cosine"},
     )
     print(f"✓ Created empty collection '{name}' (id={coll.id}).")
-    print(f"  Dim is set automatically on first upsert (current setting: see .env).")
+    print("  Dim is set automatically on first upsert (current setting: see .env).")
     print()
     print("Next steps:")
     print(f"  1. Set it as active:    python scripts/manage_collection.py use {name}")
-    print(f"  2. Re-ingest:           make ingest")
-    print(f"  3. (optional) drop the old one when satisfied:")
-    print(f"     python scripts/manage_collection.py drop <old-name>")
+    print("  2. Re-ingest:           make ingest")
+    print("  3. (optional) drop the old one when satisfied:")
+    print("     python scripts/manage_collection.py drop <old-name>")
     return 0
 
 
@@ -186,7 +186,7 @@ def cmd_drop(args: argparse.Namespace) -> int:
     if not args.yes:
         print(f"⚠️  About to DELETE collection '{name}' (IRREVERSIBLE).")
         print("   All vectors, documents, and metadata in that collection will be lost.")
-        print("   The source data (CMAPSS + PDFs) is NOT affected — you can rebuild with 'make ingest'.")
+        print("   The source data (PDFs) is NOT affected — you can rebuild with 'make ingest'.")
         print()
         print("   If you're sure, re-run with --yes:")
         print(f"     python scripts/manage_collection.py drop {name} --yes")
@@ -199,7 +199,7 @@ def cmd_drop(args: argparse.Namespace) -> int:
     except NotFoundError:
         print(f"Collection '{name}' not found (already dropped?). Nothing to do.")
         return 0
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"❌ Cannot reach ChromaDB: {e}")
         return 1
 
@@ -230,7 +230,7 @@ def cmd_use(args: argparse.Namespace) -> int:
         if not args.force:
             return 1
         print("   --force given, updating .env anyway.")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"❌ Cannot reach ChromaDB: {e}")
         if not args.force:
             return 1

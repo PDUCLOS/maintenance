@@ -6,52 +6,42 @@
 
 ---
 
-## 1. CMAPSS — Factuel pur (RAG + retrieval)
+## 1. Capacité de charge (RAG sur catalogues)
 
-Ces questions testent la capacité du RAG à retrouver des valeurs exactes
-depuis le texte sérialisé des datasets CMAPSS.
+- **Q1** : What is the basic dynamic load rating (C) of a rolling bearing?
+  - Attendu : définition de C, mention de newtons, lien avec la durée de vie L10.
 
-- **Q1** : How many turbofan engines are in the FD001 training set?
-  - Attendu : "100 engines."
+- **Q2** : How is the rating life (L10) of a rolling bearing calculated?
+  - Attendu : formule L10 = (C/P)^p, facteurs correctifs (température, fiabilité, lubrification).
 
-- **Q2** : What is the mean of sensor_11 across all cycles in FD002?
-  - Attendu : une valeur numérique, ~47-48 (sensor_11 est très stable).
+- **Q3** : What is the difference between static (C0) and dynamic (C) load rating?
+  - Attendu : C0 = charge statique admissible sans déformation permanente, C = charge dynamique pour 1 million de tours.
 
-- **Q3** : What is the maximum number of cycles observed for any unit in FD003?
-  - Attendu : un nombre de cycles, ~500.
+## 2. Lubrification (RAG sur catalogues)
 
-## 2. CMAPSS — Raisonnement (RAG + retrieval)
+- **Q4** : How do I select a lubricant (grease or oil) for a rolling bearing?
+  - Attendu : critères (température, vitesse, charge, environnement), exemples de graisses.
 
-Ces questions testent la capacité du LLM à interpréter les trends.
+- **Q5** : What is the recommended re-lubrication interval for a deep groove ball bearing?
+  - Attendu : intervalle en heures ou mois, en fonction des conditions.
 
-- **Q4** : Does sensor_04 tend to increase, decrease, or stay stable as the engine degrades in FD001?
-  - Attendu : "decreases." (le sensor_4 = T2 - température HPC outlet, qui baisse avec l'usure).
+## 3. Montage / démontage (RAG sur catalogues)
 
-- **Q5** : What is the mean of sensor_11 at cycle 100 in FD001?
-  - Attendu : ~47.5 (très stable, peu de variation).
+- **Q6** : What is the recommended procedure to mount a deep groove ball bearing?
+  - Attendu : chauffage, ajustements, force de montage, outillage.
 
-## 3. CMAPSS — Multi-hop (agent with tool calling)
+- **Q7** : What is the difference between a loose fit and an interference fit for a bearing on a shaft?
+  - Attendu : ajustement glissant vs serré, conséquences sur le démontage.
 
-Ces questions testent l'agent avec tool calling Python. **Activer le toggle "Use agent" dans l'UI**.
+## 4. Diagnostic (RAG sur catalogues)
 
-- **Q6** : For FD001, what is the mean of sensor_07 across all units?
-  - Attendu : une valeur numérique précise.
+- **Q8** : How do I diagnose a bearing defect through vibration analysis?
+  - Attendu : FFT, fréquences caractéristiques, seuils de sévérité ISO 10816.
 
-- **Q7** : What is the mean RUL in FD002?
-  - Attendu : ~110-120 cycles.
+- **Q9** : What are the operating temperature limits for a rolling bearing?
+  - Attendu : plage normale, alerte, alarme, influence du lubrifiant.
 
-## 4. Schaeffler + SKF — RAG sur PDFs techniques
-
-Ces questions testent la capacité du RAG à retrouver des infos depuis
-les catalogues industriels.
-
-- **Q8** : What is the recommended mounting temperature for FAG induction heating devices?
-  - Attendu : ~120°C (info du PDF FAG Equipment and Services).
-
-- **Q9** : What is the basic dynamic load rating formula used by SKF for rolling bearings?
-  - Attendu : "L10 = (C/P)^p" (info du PDF SKF 17000/1, section A.1).
-
-## 5. Out-of-scope (test d'honnêteté)
+## 5. Hors-scope (test d'honnêteté)
 
 **Aucune de ces questions ne doit recevoir une réponse confiante.**
 
@@ -65,34 +55,36 @@ les catalogues industriels.
 ```bash
 # 1. Une seule fois (à faire avant l'entretien)
 cd "/Users/patriceduclos/Library/CloudStorage/GoogleDrive-patrice.noel.duclos@gmail.com/Mon Drive/PromptAI/rag-copilot"
-make setup && make pull-models && make data && make chroma-up
+make setup && make pull-models
+# Drop Schaeffler / SKF / NTN-SNR catalogues into data/raw/pdf/
+make chroma-up
 make ingest && make eval-dataset
 
-# 2. Le jour J, dans 3 terminaux
+# 2. Le jour J, dans 2 terminaux
 make api    # terminal 1 — FastAPI :8000
 make ui     # terminal 2 — Streamlit :8501
-# terminal 3 — libre, pour les logs / debug
 
 # 3. Poser les questions dans l'ordre 1 → 10 dans l'onglet Chat
-#    Activer le toggle "Use agent" pour Q6 et Q7
+#    (pas besoin de toggle "agent" — il a été supprimé en juillet 2026
+#    (le tool agent a été retiré en juillet 2026)
 ```
 
 ## Checklist "démo qui marche" (à checker 1h avant)
 
-- [ ] `make health` (ou `/health` endpoint) → `status: ok`, `chroma: True`, `mlx_ready: True`
+- [ ] `/health` → `status: ok`, `chroma: True`, `mlx_ready: True`
 - [ ] `make eval` produit un snapshot récent dans `reports/`
-- [ ] L'UI Charge bien l'inventaire (Schaeffler + SKF visibles)
-- [ ] Q1 répond en < 5 sec avec "100 engines"
-- [ ] Q4 répond avec "decreases" ou "increases" + justification
+- [ ] L'UI charge bien l'inventaire (Schaeffler + SKF + NTN-SNR visibles)
+- [ ] Q1 répond en < 5 sec avec une définition de C
+- [ ] Q4 mentionne les critères température / vitesse / charge
 - [ ] Q10 dit "I don't know"
-- [ ] L'agent (Q6, Q7) renvoie une valeur numérique quand le toggle est activé
+- [ ] Une question FR reçoit une réponse FR (mirror)
 
 ## Erreurs courantes et fix rapide
 
 | Erreur | Cause | Fix |
 |--------|-------|-----|
 | "API n'a pas répondu" | `make api` pas lancé | `make api` dans un autre terminal |
-| Latence > 20 sec | Cold start Mistral 7B | 1er appel charge le modèle (~10s), c'est normal |
+| Latence > 20 sec | Cold start Qwen2.5-7B | 1er appel charge le modèle (~10s), c'est normal |
 | RAGAS baseline < 0.5 | Tuning pas fait | Section W4 du PLAN.md, méthodes documentées dans `docs/evaluation.md` |
 | "Chroma not reachable" | Container pas démarré | `make chroma-up` |
 | MLX refuse de charger | Pas Apple Silicon | Le projet est Apple-Silicon-only par design |

@@ -12,7 +12,7 @@
 > produits industriels.
 >
 > Concrètement : on ingère les **fiches techniques PDF** et les
-> **données structurées CMAPSS de la NASA** (capteurs de turbofan), on
+> **catalogues de roulements Schaeffler / SKF / NTN-SNR** (~5 000 pages de doc technique), on
 > les chunk, on les embed, on les stocke dans **ChromaDB**, et un
 > **Qwen2.5-7B** tournant en local sur mon Mac — pas d'API payante —
 > génère la réponse avec les sources citées.
@@ -43,7 +43,7 @@
 **5 questions prêtes (à tester en avance) :**
 
 1. **Factuel pur** : "How many turbofan engines are in the FD001 training set?"
-   - Attend : un nombre exact + source `[cmapss:FD001]`
+   - Attend : une définition + source `[pdf:skf-17000-rolling-bearings.pdf:p42]`
 
 2. **Statistique sur capteur** : "What is the mean of sensor_11 in FD002?"
    - Attend : une valeur numérique + source

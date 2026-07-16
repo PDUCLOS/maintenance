@@ -2,7 +2,7 @@
 
 Tabs:
   1. Chat         — the core RAG chat interface (existing)
-  2. Inventory    — data/raw inventory: CMAPSS subsets + Schaeffler + SKF PDFs
+  2. Inventory    — data/raw inventory: Schaeffler + SKF + NTN-SNR PDF catalogues
   3. RAGAS        — latest evaluation snapshot + history of all snapshots
   4. Index        — ChromaDB stats: chunk count, source distribution, sample
 
@@ -55,7 +55,7 @@ def _api_post(path: str, payload: dict, timeout: float = 60.0) -> dict | None:
         return None
 
 
-# --- PDF / CMAPSS inspection helpers -----------------------------------------
+# --- PDF inspection helpers -------------------------------------------------
 
 
 def _pdf_metadata(pdf_path: Path) -> dict:
@@ -105,15 +105,16 @@ with st.sidebar:
     with st.expander("❓ À propos de cet outil", expanded=True):
         st.markdown(
             "**Industrial Knowledge Copilot** est un copilote RAG local qui répond à des "
-            "questions sur la **maintenance industrielle** (roulements, capteurs, "
-            "durée de vie) en croisant :\n"
-            "- les **données NASA CMAPSS** (4 datasets, 100+ moteurs, 21 capteurs)\n"
-            "- les **catalogues Schaeffler &amp; SKF** (4 343 pages, en anglais)\n\n"
-            "**À quoi il répond** : questions factuelles (« combien de moteurs dans FD001 ? »), "
-            "statistiques (« moyenne de sensor_11 »), tendances (« le capteur monte ou descend ? »), "
-            "et questions précises sur les catalogues industriels.\n\n"
+            "questions sur la **maintenance des roulements** (capacité de charge, lubrification, "
+            "montage, diagnostic vibratoire, modes de défaillance) en s'appuyant sur :\n"
+            "- les **catalogues Schaeffler, SKF et NTN-SNR** (≈ 5 000 pages, FR + EN)\n\n"
+            "**À quoi il répond** : capacité de charge (C, C0, L10), lubrification (graisse, huile, "
+            "intervalles), procédures de montage / démontage, diagnostic vibratoire, "
+            "limites de température, modes de défaillance courants.\n\n"
             "**À quoi il ne répond pas** : questions hors domaine (météo, cuisine, "
-            "prévisions boursières, etc.) — il le dit explicitement.",
+            "prévisions boursières, courses de chevaux, etc.) — il le dit explicitement. "
+            "Il ne fait pas non plus de calculs RUL ou d'analyse de séries temporelles "
+            "de capteurs (pas de données structurées dans ce projet).",
         )
 
     st.divider()
@@ -147,10 +148,11 @@ tab_chat, tab_inventory, tab_ragas, tab_index = st.tabs(
 # Tab 1: Chat
 # ============================================================================
 with tab_chat:
-    st.title("Copilote de maintenance industrielle")
+    st.title("Copilote de maintenance des roulements")
     st.caption(
-        "Pose une question sur la **maintenance industrielle** — données NASA CMAPSS "
-        "(capteurs, durée de vie) ou catalogues techniques (Schaeffler, SKF). "
+        "Pose une question sur la **maintenance des roulements** — capacité de charge, "
+        "lubrification, montage, diagnostic vibratoire, modes de défaillance. "
+        "Les réponses sont construites à partir des catalogues Schaeffler, SKF et NTN-SNR. "
         "Tu peux écrire librement ou utiliser le **formulaire guidé** ci-dessous."
     )
 
@@ -158,15 +160,7 @@ with tab_chat:
         st.session_state.messages = []
 
     # Controls above the chat history
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        top_k = st.slider("Nombre de chunks récupérés (top-K)", min_value=1, max_value=20, value=5)
-    with c2:
-        use_agent = st.toggle(
-            "Activer l'agent (tool calling Python)",
-            value=False,
-            help="Permet au copilote d'exécuter des requêtes pandas sur les données CMAPSS.",
-        )
+    top_k = st.slider("Nombre de sources récupérées (top-K)", min_value=1, max_value=20, value=5)
 
     # --- Guided question (intent picker) -----------------------------------
     with st.expander("🎯 Question guidée — choisis un template", expanded=False):
@@ -305,39 +299,8 @@ with tab_inventory:
         "Voir `data/raw/pdf/INVENTORY.md` pour les détails complets."
     )
 
-    # CMAPSS section
-    st.subheader("NASA CMAPSS (dégradation de turbofans)")
-    cmapss_dir = settings.cmapss_dir
-    if cmapss_dir.is_dir():
-        cmapss_files = sorted(cmapss_dir.glob("*.txt")) + sorted(cmapss_dir.glob("*.pdf"))
-        cmapss_data = []
-        for f in cmapss_files:
-            if f.suffix == ".txt":
-                size_kb = f.stat().st_size / 1024
-                cmapss_data.append(
-                    {
-                        "Fichier": f.name,
-                        "Type": "Données texte",
-                        "Taille": f"{size_kb:.0f} KB",
-                    }
-                )
-            elif f.suffix == ".pdf":
-                meta = _pdf_metadata(f)
-                cmapss_data.append(
-                    {
-                        "Fichier": f.name,
-                        "Type": f"PDF ({meta['pages']} pages)",
-                        "Taille": f"{meta['size_mb']} MB",
-                    }
-                )
-        st.dataframe(pd.DataFrame(cmapss_data), use_container_width=True, hide_index=True)
-    else:
-        st.warning(f"Dossier CMAPSS manquant : {cmapss_dir}. Lance `make data`.")
-
-    st.divider()
-
     # PDF section
-    st.subheader("Catalogues industriels (Schaeffler + SKF)")
+    st.subheader("Catalogues industriels (Schaeffler, SKF, NTN-SNR)")
     pdf_dir = settings.pdf_dir
     if pdf_dir.is_dir():
         pdfs = sorted(pdf_dir.glob("*.pdf"))
@@ -348,13 +311,15 @@ with tab_inventory:
             for f in pdfs:
                 meta = _pdf_metadata(f)
                 # Brand inference from filename
-                brand = (
-                    "Schaeffler"
-                    if "schaeffler" in f.name.lower() or "fag" in f.name.lower()
-                    else "SKF"
-                    if "skf" in f.name.lower()
-                    else "?"
-                )
+                name_lc = f.name.lower()
+                if "schaeffler" in name_lc or "fag" in name_lc or "ina" in name_lc:
+                    brand = "Schaeffler"
+                elif "skf" in name_lc:
+                    brand = "SKF"
+                elif "ntn" in name_lc or "snr" in name_lc:
+                    brand = "NTN-SNR"
+                else:
+                    brand = "?"
                 pdf_data.append(
                     {
                         "Fichier": f.name,
