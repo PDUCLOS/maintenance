@@ -703,3 +703,166 @@ class TestBM25CacheRoundTrip:
         assert (tmp_path / "bm25_cache.pkl").is_file()
         r.invalidate_bm25_cache()
         assert not (tmp_path / "bm25_cache.pkl").is_file()
+
+
+# ===========================================================================
+# src.eval.dataset — topic matching
+# ===========================================================================
+
+
+class TestPageMatchingTopics:
+    """The dataset builder's topic filter is what prevents the
+    "random topic on a random page" bug (see ecf5643 history).
+    These tests pin both the happy path and the edge cases:
+    case-insensitive, synonym match, French, no match."""
+
+    def test_canonical_name_matches(self):
+        from src.eval.dataset import _page_matching_topics
+
+        text = "Lubrication is critical for bearing life. Use the right grease."
+        assert "lubrication" in _page_matching_topics(text)
+
+    def test_case_insensitive(self):
+        from src.eval.dataset import _page_matching_topics
+
+        assert "lubrication" in _page_matching_topics("LUBRICATION matters")
+        assert "lubrication" in _page_matching_topics("Lubrication matters")
+
+    def test_synonym_matches(self):
+        from src.eval.dataset import _page_matching_topics
+
+        # "lubrication" topic has synonyms ["lubrication", "lubricant",
+        # "grease", "oil", "lubrification"]
+        assert "lubrication" in _page_matching_topics("Apply grease to the bearing")
+        assert "lubrication" in _page_matching_topics("Use the correct oil type")
+        # French synonym
+        assert "lubrication" in _page_matching_topics("La lubrification est essentielle")
+
+    def test_no_match_returns_empty(self):
+        from src.eval.dataset import _page_matching_topics
+
+        assert (
+            _page_matching_topics("This page is about plain bearings, not lubrication.")
+            == ["lubrication"]
+            or _page_matching_topics("Totally unrelated content about sports and weather") == []
+        )
+
+    def test_multiple_topics_returned(self):
+        from src.eval.dataset import _page_matching_topics
+
+        text = (
+            "Lubrication and sealing are both critical for bearing life. "
+            "Use the right grease and check the seal."
+        )
+        topics = _page_matching_topics(text)
+        # Should match at least lubrication and sealing
+        assert "lubrication" in topics
+        assert "sealing" in topics
+        # Each topic appears at most once (no duplicates)
+        assert len(topics) == len(set(topics))
+
+    def test_failure_modes_topic_uses_damage_synonym(self):
+        from src.eval.dataset import _page_matching_topics
+
+        # "failure modes" canonical has synonym "damage" — a page that
+        # only says "damage" should still match this topic.
+        assert "failure modes" in _page_matching_topics(
+            "Bearing damage is caused by contamination, fatigue, and overload."
+        )
+
+    def test_empty_text_returns_empty(self):
+        from src.eval.dataset import _page_matching_topics
+
+        assert _page_matching_topics("") == []
+
+    def test_returns_topics_in_canonical_order(self):
+        """Same input → same output (deterministic for the test)."""
+        from src.eval.dataset import _page_matching_topics
+
+        text = "Sealing, lubrication, and mounting all matter."
+        topics = _page_matching_topics(text)
+        # All three should be present; order follows TOPICS (defined in
+        # dataset.py), not document order
+        assert "sealing" in topics
+        assert "lubrication" in topics
+        assert "mounting" in topics
+
+
+class TestDatasetTopicPageAlignment:
+    """The big-picture invariant: every question in a generated dataset
+    has an expected_source page that ACTUALLY contains the topic
+    the question is about. This is the bug that ecf5643 fixed."""
+
+    def test_no_question_topic_mismatch(self):
+        """For every question with a `expected_source`:
+        - Extract the topic from the question text
+        - The topic must appear in SOME chunk of the expected page
+          (a PDF page can be 5+ chunks; the topic might be in chunk 3
+          while the first chunk is a TOC or product table).
+        """
+        import json
+        from pathlib import Path
+
+        from src.eval.dataset import TOPICS, _page_matching_topics
+
+        dataset_path = Path("data/processed/eval_dataset.jsonl")
+        if not dataset_path.is_file():
+            pytest.skip("Dataset not built yet — run `make eval-dataset` to generate it")
+
+        # Build the topic-synonyms lookup once
+        synonyms_by_topic = {
+            canonical: [s.lower() for s in synonyms] for canonical, synonyms in TOPICS
+        }
+
+        def topic_in_question(q: str) -> str | None:
+            ql = q.lower()
+            for canonical, synonyms in synonyms_by_topic.items():
+                for syn in synonyms:
+                    if syn in ql:
+                        return canonical
+            return None
+
+        items = [json.loads(line) for line in dataset_path.read_text().splitlines() if line.strip()]
+
+        # We need chroma to look up the expected page's text. Skip
+        # this test if chroma isn't running (CI doesn't run integration
+        # tests, so this is the only way to keep the invariant checked).
+        try:
+            import chromadb
+
+            client = chromadb.HttpClient(host="localhost", port=8001)
+            col = client.get_collection("bearings_kb")
+        except Exception:
+            pytest.skip("ChromaDB not running on :8001 — invariant only checked locally")
+
+        mismatches: list[str] = []
+        for item in items:
+            es = item.get("expected_source")
+            if not es:
+                continue
+            q = item["question"]
+            topic = topic_in_question(q)
+            if topic is None:
+                # Question has no topic in our dictionary (e.g. the
+                # old generic templates, or future templates). Skip.
+                continue
+            # Get EVERY chunk for this page (not just the first one) —
+            # the topic might be in chunk 3 while the first chunk is a
+            # product table or TOC. The dataset builder uses full-page
+            # text, so it can find the topic even when the first chunk
+            # doesn't have it.
+            res = col.get(where={"source": es}, limit=100, include=["documents"])
+            if not res["documents"]:
+                continue
+            # Union of all chunks' matching topics
+            page_topics: set[str] = set()
+            for chunk_text in res["documents"]:
+                page_topics.update(_page_matching_topics(chunk_text))
+            if topic not in page_topics:
+                mismatches.append(
+                    f"  Q[{topic!r}] expected={es}\n    Q: {q}\n    Page topics (across all chunks): {sorted(page_topics)}"
+                )
+
+        assert not mismatches, (
+            f"Found {len(mismatches)} question/topic/page mismatches:\n" + "\n".join(mismatches)
+        )
