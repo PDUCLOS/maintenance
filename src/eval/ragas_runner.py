@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from src.config import settings
+from src.config import PROJECT_ROOT, settings
 from src.rag.chain import RAGChain
 from src.utils.logger import logger
 from src.utils.timing import timed
@@ -148,7 +148,7 @@ def _per_source_retrieval_precision(items: list[dict], samples: list[dict]) -> d
 
 def _snapshot(metrics: list[MetricResult], n_samples: int) -> EvalSnapshot:
     ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
-    out = settings.processed_data_dir.parent / "reports" / f"eval_{ts}.json"
+    out = PROJECT_ROOT / "reports" / f"eval_{ts}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "timestamp_utc": ts,
