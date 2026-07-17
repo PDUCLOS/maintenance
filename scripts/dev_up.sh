@@ -47,6 +47,17 @@ export TRANSFORMERS_OFFLINE=1
 # le process tourne — impossible de voir ce qui se passe pendant le chargement.
 export PYTHONUNBUFFERED=1
 
+# PyArrow (utilisé par Streamlit pour sérialiser les DataFrames vers le
+# frontend, et par `datasets`/ragas côté API) embarque son propre
+# allocateur mémoire (mimalloc). Ce build crashe (SIGSEGV, null deref
+# dans mi_thread_init) quand il est touché pour la 1ère fois depuis un
+# thread non-principal — exactement le thread interne de Streamlit
+# (ScriptRunner), qui n'est jamais le main thread du process. Forcer
+# l'allocateur système contourne complètement ce chemin de code buggé.
+# Reproduit et vérifié : sans ça, l'onglet Index (bar chart "Distribution
+# par source") segfault le process Streamlit de façon systématique.
+export ARROW_DEFAULT_MEMORY_POOL=system
+
 # Combien de temps on attend qu'API/UI répondent avant de considérer que
 # le démarrage a échoué (cold start MLX + bge-m3 peut être lent la 1ère fois).
 READY_TIMEOUT="${READY_TIMEOUT:-180}"
