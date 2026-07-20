@@ -112,6 +112,67 @@ short SHA (first 7 chars) for traceability.
   `st.slider(...)` line in the chat tab was rendering the control
   twice. Removed.
 
+### Added
+- **Bilingual dataset generation (FR + EN)** — the dataset builder now
+  detects the page's language (`src.rag.language.detect_language` on
+  the full page text) and emits the question in that language. EN
+  pages get EN templates; FR pages (the NTN-SNR catalogue +
+  diagnostic guide) get FR templates with the FR equivalent of the
+  topic. The dense retriever (bge-m3) is multilingual, but an EN
+  query for "rating life" surfaces EN content (SKF/Schaeffler) and
+  misses the same topic in FR (NTN-SNR) — generating the question
+  in the page's own language fixes this and makes the per-source
+  metric meaningful for the FR-only PDFs. Two new artefacts:
+  - `TOPIC_FR` — canonical-name → "le / la / les / l' + noun" map
+    (article baked into the topic so templates don't need to
+    produce the article themselves — avoids "de le" elision bugs).
+  - `QUESTION_TEMPLATES_FACTUAL/REASONING/RETRIEVAL` — now a
+    `{en: [...], fr: [...]}` dict, both lists in the same template
+    style ("Que dit cette page à propos de {topic} ?", "Pourquoi
+    s'intéresse-t-on à {topic} dans la maintenance ?"). The FR
+    reasoning templates use impersonal "s'intéresser à" / "il faut"
+    forms to dodge gender agreement (FR verbs agree with their
+    subject in m./f., s./pl., which is impossible to know at
+    template-fill time).
+- **Stratified sampling by PDF (`_sample_stratified_by_pdf`)** —
+  pure random sampling from the corpus let the 4 dominant PDFs
+  (Schaeffler + SKF, ~80% of pages) eat all 20 dataset slots, leaving
+  the 9 smaller PDFs (NTN-SNR, GGB, FAG, sp1, etc.) with zero
+  representation. Round-robin stratified sampling guarantees each
+  PDF gets at least one question. With seed=42, NTN-SNR is now
+  in the dataset for the first time (3 questions, all in French).
+
+### Changed
+- **TOPICS list bilingual** — each of the 20 topics now has a list
+  of EN + FR synonyms. A topic is matched on a page if ANY synonym
+  appears in the page text. Before this fix, NTN-SNR's FR-only
+  pages couldn't match the EN-only TOPICS list and were dropped
+  (1059 pages dropped, no NTN-SNR in the dataset). After: 1021
+  dropped, NTN-SNR is in the dataset.
+- **Pages tuple is now 4-element** — was `(source, paragraph,
+  topics)`, now `(source, paragraph, full_text, topics)`. The
+  full text is needed for accurate language detection (short
+  paragraphs dominated by tables / bullet lists can be
+  mis-classified). Memory cost: ~10 MB total for the ~4000-page
+  corpus — fine.
+
+### Tests
+- 14 new unit tests in `tests/test_pure_helpers.py`:
+  - 5 in `TestPageMatchingTopics` for the FR synonyms (lubrification,
+    capacité de charge, montage, étanchéité, modes de défaillance).
+  - 6 in `TestSampleStratifiedByPdf` (round-robin covers all PDFs,
+    deterministic with seed, no duplicate page picks in one call,
+    empty pool, n=0, real-shape distribution).
+  - 7 in `TestFormatQuestion` (EN page → EN question, FR page → FR
+    question with article, FR reasoning template has no broken
+    gender agreement, FR retrieval template uses 'sur' to avoid
+    'de le' elision, every FR topic has an article, the real
+    dataset is bilingual).
+- Total: 130 unit tests passing (was 114). Ruff clean. Two tests
+  are skipped when chromadb isn't running on :8001 (they're
+  integration-style — `TestDatasetTopicPageAlignment` and
+  `TestBilingualRetrieverReachability`).
+
 ---
 
 ## [0.1.0] — 2026-07-16

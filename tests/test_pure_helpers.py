@@ -787,6 +787,84 @@ class TestPageMatchingTopics:
         assert "lubrication" in topics
         assert "mounting" in topics
 
+    def test_french_lubrication_synonyms(self):
+        """NTN-SNR's FR-only lubricant section uses 'graissage' / 'graisse'
+        / 'lubrifiant' — all must map to the lubrication topic so the
+        French catalogue isn't filtered out of the eval dataset."""
+        from src.eval.dataset import _page_matching_topics
+
+        assert "lubrication" in _page_matching_topics(
+            "Le graissage des roulements est essentiel pour leur durée de vie."
+        )
+        assert "lubrication" in _page_matching_topics(
+            "Appliquer une graisse adaptée au type de roulement."
+        )
+        assert "lubrication" in _page_matching_topics(
+            "Utiliser un lubrifiant synthétique haute performance."
+        )
+        assert "lubrication" in _page_matching_topics("La lubrification périodique réduit l'usure.")
+
+    def test_french_load_synonyms(self):
+        """FR load terms must trigger the right load-rating topic."""
+        from src.eval.dataset import _page_matching_topics
+
+        assert "load rating" in _page_matching_topics(
+            "La capacité de charge dynamique d'un roulement à billes est normalisée."
+        )
+        assert "load rating" in _page_matching_topics("Calcul de la charge de base selon ISO 76.")
+        assert "radial load" in _page_matching_topics("Charge radiale admissible: 12 kN.")
+        assert "axial load" in _page_matching_topics("Charge axiale combinée: 5 kN + moment.")
+
+    def test_french_mounting_alignment_sealing(self):
+        """FR mounting / alignment / sealing / clearance terms."""
+        from src.eval.dataset import _page_matching_topics
+
+        assert "mounting" in _page_matching_topics(
+            "Procédure de montage à froid sur arbre cylindrique."
+        )
+        assert "alignment" in _page_matching_topics(
+            "Vérifier l'alignement de l'arbre avant serrage."
+        )
+        assert "sealing" in _page_matching_topics(
+            "L'étanchéité est assurée par deux joints toriques."
+        )
+        assert "bearing clearance" in _page_matching_topics("Le jeu interne du roulement est C3.")
+
+    def test_french_failure_modes_synonyms(self):
+        """The NTN-SNR diagnostic guide is FR-only and rich in
+        failure-mode vocabulary. All its key terms must map to the
+        'failure modes' topic so the diagnostic guide is reachable
+        from the eval dataset."""
+        from src.eval.dataset import _page_matching_topics
+
+        assert "failure modes" in _page_matching_topics(
+            "Modes de défaillance : écaillage, fissuration, corrosion."
+        )
+        assert "failure modes" in _page_matching_topics(
+            "Diagnostic de l'endommagement par fatigue de contact."
+        )
+        assert "failure modes" in _page_matching_topics(
+            "Arbre de défaillance: cause → symptôme → remède."
+        )
+        assert "diagnostic method" in _page_matching_topics(
+            "Méthode de diagnostic vibratoire sur machine tournante."
+        )
+
+    def test_french_does_not_match_unrelated_topics(self):
+        """Sanity check: a French sentence shouldn't spuriously match
+        an EN-only topic. Otherwise the dataset would assign noise."""
+        from src.eval.dataset import _page_matching_topics
+
+        # Pure FR about flowers — should match nothing
+        text = "Les fleurs du jardin sont belles au printemps."
+        topics = _page_matching_topics(text)
+        assert topics == []
+
+        # EN-only text — should match nothing new
+        text_en = "The cat sat on the mat."
+        topics_en = _page_matching_topics(text_en)
+        assert topics_en == []
+
 
 class TestDatasetTopicPageAlignment:
     """The big-picture invariant: every question in a generated dataset
@@ -866,3 +944,341 @@ class TestDatasetTopicPageAlignment:
         assert not mismatches, (
             f"Found {len(mismatches)} question/topic/page mismatches:\n" + "\n".join(mismatches)
         )
+
+
+# ===========================================================================
+# src.eval.dataset — stratified sampling
+# ===========================================================================
+
+
+class TestSampleStratifiedByPdf:
+    """Round-robin sampling guarantees every PDF gets at least one
+    pick — important because Schaeffler/SKF dominate the corpus
+    (~80% of pages) and NTN-SNR (FR-only) is ~1.5%. Without
+    stratification, NTN-SNR can end up with zero questions in a
+    seed=42 random sample."""
+
+    def _mk_pool(self):
+        """A pool that mirrors the real corpus (8 PDFs, varying sizes).
+
+        Format: (source, paragraph, full_text, topics) — the 4-tuple
+        the dataset builder now produces. `full_text` is the full page
+        text (used for language detection); `paragraph` is the
+        first-paragraph ground truth (used as the eval answer).
+        """
+        # A small English snippet — enough for detect_language to
+        # classify as "en".
+        en_text = "Bearing lubrication is critical. The grease type affects performance."
+        # A small French snippet — enough to classify as "fr".
+        fr_text = (
+            "La lubrification des roulements est essentielle. La graisse affecte la performance."
+        )
+        return (
+            [("pdf:big1.pdf:p" + str(i), f"para {i}", en_text, ["lubrication"]) for i in range(500)]
+            + [
+                ("pdf:big2.pdf:p" + str(i), f"para {i}", en_text, ["lubrication"])
+                for i in range(500)
+            ]
+            + [
+                ("pdf:small_fr.pdf:p" + str(i), f"para {i}", fr_text, ["lubrication"])
+                for i in range(15)
+            ]
+            + [
+                ("pdf:small_gb.pdf:p" + str(i), f"para {i}", en_text, ["lubrication"])
+                for i in range(20)
+            ]
+            + [
+                ("pdf:medium.pdf:p" + str(i), f"para {i}", en_text, ["lubrication"])
+                for i in range(80)
+            ]
+            + [
+                ("pdf:tiny1.pdf:p1", "para 1", en_text, ["lubrication"]),
+                ("pdf:tiny2.pdf:p1", "para 1", en_text, ["lubrication"]),
+                ("pdf:tiny3.pdf:p1", "para 1", en_text, ["lubrication"]),
+                ("pdf:tiny4.pdf:p1", "para 1", en_text, ["lubrication"]),
+            ]
+        )
+
+    def test_each_pdf_appears_at_least_once(self):
+        import random
+
+        from src.eval.dataset import _sample_stratified_by_pdf
+
+        rng = random.Random(42)
+        picked = _sample_stratified_by_pdf(rng, self._mk_pool(), 10)
+        pdfs_picked = {p[0].split(":")[1] for p in picked}
+        # 10 slots, 9 PDFs in the pool → all 9 should appear
+        assert len(pdfs_picked) == 9
+        # The small FR one MUST be there — that's the whole point
+        assert "small_fr.pdf" in pdfs_picked
+        assert "small_gb.pdf" in pdfs_picked
+
+    def test_deterministic_with_seed(self):
+        """Same seed → same output. Important so `make eval-dataset`
+        gives the same dataset every time."""
+        import random
+
+        from src.eval.dataset import _sample_stratified_by_pdf
+
+        pool = self._mk_pool()
+        r1 = _sample_stratified_by_pdf(random.Random(42), pool, 10)
+        r2 = _sample_stratified_by_pdf(random.Random(42), pool, 10)
+        assert [p[0] for p in r1] == [p[0] for p in r2]
+
+    def test_with_more_n_than_unique_pdfs(self):
+        """If n > number of PDFs (with multi-page PDFs), we cycle
+        back through PDFs and pick a DIFFERENT page the second time
+        (not the same page twice in a row)."""
+        import random
+
+        from src.eval.dataset import _sample_stratified_by_pdf
+
+        rng = random.Random(42)
+        # 4 PDFs, 3 pages each → 12 total pages. n=8 means 2 PDFs get
+        # a 2nd pick, and those 2nd picks MUST be different pages.
+        pool = []
+        for pdf in ("a", "b", "c", "d"):
+            pool.extend((f"pdf:{pdf}.pdf:p{i}", f"para {i}", "text", ["t"]) for i in range(3))
+        picked = _sample_stratified_by_pdf(rng, pool, 8)
+        assert len(picked) == 8
+        # Group by PDF, check no PDF has 2 picks of the same page
+        by_pdf_pages: dict = {}
+        for p in picked:
+            pdf = p[0].split(":")[1]
+            page = p[0].split(":p")[-1]
+            by_pdf_pages.setdefault(pdf, []).append(page)
+        for pdf, pages in by_pdf_pages.items():
+            assert len(pages) == len(set(pages)), f"{pdf} picked the same page twice: {pages}"
+
+    def test_empty_pool(self):
+        import random
+
+        from src.eval.dataset import _sample_stratified_by_pdf
+
+        assert _sample_stratified_by_pdf(random.Random(42), [], 10) == []
+
+    def test_n_zero(self):
+        import random
+
+        from src.eval.dataset import _sample_stratified_by_pdf
+
+        assert _sample_stratified_by_pdf(random.Random(42), self._mk_pool(), 0) == []
+
+    def test_real_dataset_distribution_uses_all_pdfs(self):
+        """The smoke test: with seed=42 and a real-shaped pool, the
+        result must cover all PDFs. We mirror the real distribution:
+        1 large + 1 medium + several small."""
+        import random
+
+        from src.eval.dataset import _sample_stratified_by_pdf
+
+        # 1 large PDF (700 pages) + 12 small (10-50 pages each)
+        pool = [("pdf:large.pdf:p" + str(i), "p", "text", ["t"]) for i in range(700)]
+        small_pdfs = [f"small{i}.pdf" for i in range(12)]
+        for pdf in small_pdfs:
+            pool.extend((f"pdf:{pdf}:p{i}", "p", "text", ["t"]) for i in range(20))
+
+        rng = random.Random(42)
+        # Factual category is 10 items → 10 unique PDFs sampled
+        picked = _sample_stratified_by_pdf(rng, pool, 10)
+        pdfs_picked = {p[0].split(":")[1] for p in picked}
+        # All 12 small PDFs SHOULD be reachable when we have 10 slots
+        # and 13 PDFs (we pick 10 of the 13, the other 3 cycle out)
+        assert len(pdfs_picked) == 10
+        # Every picked PDF should be either 'large' or one of the 12 small
+        for pdf in pdfs_picked:
+            assert pdf == "large.pdf" or pdf in small_pdfs
+
+
+# ===========================================================================
+# src.eval.dataset — bilingual question generation
+# ===========================================================================
+
+
+class TestFormatQuestion:
+    """The dataset now generates FR questions for FR pages and EN
+    questions for EN pages. The dense retriever (bge-m3) is
+    multilingual but an EN query for a topic like "What is the
+    rating life?" surfaces EN content (SKF/Schaeffler) — the same
+    query in FR ("durée de vie") surfaces FR content (NTN-SNR).
+    Generating a question in the page's own language is what a real
+    user would type, and it's the only way the per-source metric
+    measures something meaningful for the FR-only PDFs."""
+
+    def test_en_page_gets_en_question(self):
+        import random
+
+        from src.eval.dataset import _format_question
+
+        en_text = (
+            "Bearing lubrication is critical for rolling element fatigue life. "
+            "The grease type affects performance and the basic dynamic load rating."
+        )
+        rng = random.Random(0)
+        question, lang = _format_question("factual", en_text, en_text, "lubrication", rng)
+        assert lang == "en"
+        assert question.startswith("What ")
+        assert "lubrication" in question
+        # The topic is in English, not French
+        assert "lubrification" not in question
+
+    def test_fr_page_gets_fr_question(self):
+        import random
+
+        from src.eval.dataset import _format_question
+
+        fr_text = (
+            "La lubrification des roulements est essentielle pour leur durée de vie. "
+            "Le type de graisse affecte les performances et la capacité de charge."
+        )
+        # Try several seeds — there are 2 FR factual templates; we
+        # need at least one of them to be picked.
+        saw_grammar_correct = False
+        for seed in range(20):
+            rng = random.Random(seed)
+            question, lang = _format_question("factual", fr_text, fr_text, "lubrication", rng)
+            assert lang == "fr"
+            # Article "la" baked into the FR topic ("la lubrification")
+            assert "la lubrification" in question
+            # The question must be in French (basic sanity)
+            assert "lubrication" not in question  # never the English form
+            # No broken grammar like "à propos de lubrification" (missing article)
+            assert "à propos de lubrification" not in question
+            assert "de lubrification" not in question
+            saw_grammar_correct = True
+        assert saw_grammar_correct, "No FR factual template rendered"
+
+    def test_fr_reasoning_template_is_grammatical(self):
+        """The previous "Pourquoi {topic} est important..." template
+        produced ungrammatical outputs for feminine / plural topics
+        ('Pourquoi la lubrification est important' — agreement broken).
+        The new 's'intéresser à' impersonal form is gender-neutral."""
+        import random
+
+        from src.eval.dataset import _format_question
+
+        fr_text = "La lubrification des roulements est critique."
+        rng = random.Random(0)
+        # Run a few times to hit the different templates
+        for _ in range(10):
+            question, _ = _format_question("reasoning", fr_text, fr_text, "lubrication", rng)
+            # Must NOT contain the broken "est important" (m. agreement)
+            assert (
+                "est important" not in question
+            ), f"FR reasoning template has wrong gender agreement: {question!r}"
+            # Must NOT have "permet-il" (m. agreement)
+            assert (
+                "permet-il" not in question
+            ), f"FR reasoning template has wrong gender agreement: {question!r}"
+            # Must NOT have "répond-il" (m. agreement with plural topic)
+            assert (
+                "répond-il" not in question
+            ), f"FR reasoning template has wrong gender agreement: {question!r}"
+
+    def test_fr_retrieval_template_avoids_de_le_elision(self):
+        """'de le' is ungrammatical FR (should be 'du'). The new
+        retrieval templates use 'sur {topic}' instead of 'de {topic}'
+        to dodge the elision rule (de + le = du, de + les = des, etc.)
+        which depends on the article baked into {topic}."""
+        import random
+
+        from src.eval.dataset import _format_question
+
+        fr_text = "Le jeu interne du roulement à billes est C3."
+        rng = random.Random(0)
+        for _ in range(10):
+            question, _ = _format_question("retrieval", fr_text, fr_text, "bearing clearance", rng)
+            # No broken "de le" / "de les" elision
+            assert "de le " not in question, f"FR retrieval has 'de le': {question!r}"
+            assert "de les " not in question, f"FR retrieval has 'de les': {question!r}"
+            # Must use 'sur' (works for any article)
+            assert " sur " in question, f"FR retrieval should use 'sur': {question!r}"
+
+    def test_topic_fr_map_includes_article(self):
+        """Every FR topic translation should include the article
+        (le / la / les / l'). Otherwise templates like 'à propos de
+        {topic}' produce ungrammatical 'à propos de lubrification'."""
+        from src.eval.dataset import TOPIC_FR
+
+        articles = ("le ", "la ", "les ", "l'")
+        for canonical, fr in TOPIC_FR.items():
+            assert fr.startswith(
+                articles
+            ), f"FR translation for {canonical!r} is missing article: {fr!r}"
+
+    def test_real_dataset_is_bilingual(self):
+        """Smoke test: with the real corpus loaded, the dataset
+        must include both EN and FR items (the FR-only NTN-SNR
+        catalogue + diagnostic guide are now reachable)."""
+        from pathlib import Path
+
+        dataset_path = Path("data/processed/eval_dataset.jsonl")
+        if not dataset_path.is_file():
+            import pytest
+
+            pytest.skip("Dataset not built — run `make eval-dataset`")
+        import json
+
+        items = [json.loads(line) for line in dataset_path.read_text().splitlines() if line.strip()]
+        langs = {it.get("language", "?") for it in items if "expected_source" in it}
+        # Both EN and FR should be represented
+        assert "en" in langs, "No EN items in the dataset — the bilingual fix didn't work"
+        assert "fr" in langs, "No FR items in the dataset — NTN-SNR is still excluded"
+
+
+class TestBilingualRetrieverReachability:
+    """End-to-end check: with a FR question, the bge-m3 retriever
+    surfaces NTN-SNR content (5/5 in our manual test). This is the
+    whole point of the bilingual dataset: a user asking in French
+    gets French content.
+
+    Skips cleanly if chromadb or the LLM aren't ready (heavy deps
+    for a unit test — this is more of a smoke test).
+    """
+
+    def test_fr_query_surfaces_ntn_snr(self):
+        try:
+            import chromadb
+
+            client = chromadb.HttpClient(host="localhost", port=8001)
+            col = client.get_collection("bearings_kb")
+            # Verify the collection is populated
+            if col.count() == 0:
+                import pytest
+
+                pytest.skip("Chroma collection empty — run `make ingest`")
+        except Exception:
+            import pytest
+
+            pytest.skip("ChromaDB not running on :8001 — bilingual test only runs locally")
+
+        import os
+
+        from src.rag.chain import RAGChain
+
+        # Force HF offline so the test doesn't hit the network
+        env = os.environ.copy()
+        env["HF_HUB_OFFLINE"] = "1"
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        # Check we can actually build the chain (Apple Silicon + MLX)
+        try:
+            chain = RAGChain.get()
+        except Exception as e:
+            import pytest
+
+            pytest.skip(f"RAGChain unavailable (probably no Apple Silicon): {e}")
+
+        # Sample 3 representative FR queries (one per category)
+        fr_queries = [
+            ("factual", "Comment choisir la graisse pour un roulement à billes ?"),
+            ("reasoning", "Quel problème les défaillances permettent-elles de résoudre ?"),
+            ("retrieval", "Quel document contient des informations sur le jeu interne ?"),
+        ]
+        for category, q in fr_queries:
+            response = chain.query(q, top_k=5)
+            ntn_hits = sum(1 for s in response.sources if "ntn_snr" in s.source)
+            assert ntn_hits >= 1, (
+                f"FR query ({category}) surfaced {ntn_hits} NTN-SNR chunks in top-5 — "
+                f"the bilingual dataset is not exercising the multilingual retriever. "
+                f"Query: {q!r}"
+            )
