@@ -6,8 +6,8 @@
 # --- LLM (MLX) — Apple Silicon only -----------------------------------------
 # mlx-lm is the official MLX wrapper for LLM inference (Metal-accelerated).
 # On non-Apple-Silicon, the LLM module will refuse to load (intentional).
-mlx==0.32.0
-mlx-lm==0.28.4
+mlx==0.32.0; sys_platform == "darwin" and platform_machine == "arm64"
+mlx-lm==0.28.4; sys_platform == "darwin" and platform_machine == "arm64"
 
 # --- Embeddings & Reranker ---------------------------------------------------
 # sentence-transformers with device="mps" (Metal) — battle-tested, multilingual.
@@ -28,7 +28,10 @@ langchainhub==0.1.20
 rank-bm25==0.2.2      # backs langchain_community.retrievers.BM25Retriever
 
 # --- Vector store -----------------------------------------------------------
-chromadb==0.6.3        # >=0.6.0 drops the tokenizers<=0.20.3 upper bound
+chromadb==0.6.3; sys_platform != "win32"   # >=0.6.0 drops the tokenizers<=0.20.3 upper bound
+# chroma-hnswlib (pulled by chromadb 0.6.x) ships no Windows wheel and needs
+# MSVC to build; chromadb 1.x embeds its own index (Rust) with Windows wheels.
+chromadb==1.0.20; sys_platform == "win32"
 
 # --- RAG evaluation ---------------------------------------------------------
 # RAGAS v0.2 — the de facto standard for RAG evaluation.
@@ -39,6 +42,9 @@ datasets==3.2.0
 pymupdf==1.25.1        # PDF parsing (faster than pypdf, better layout)
 pandas==2.2.3
 numpy==1.26.4            # <2.0.0 required by langchain-chroma==0.1.4
+# pyarrow (transitive: datasets, streamlit) >=20 requires NumPy 2 — without this
+# pin a fresh install resolves pyarrow 26 and `import datasets` crashes.
+pyarrow==18.1.0
 tiktoken==0.8.0         # Token counting for chunking
 
 # --- API (FastAPI) ----------------------------------------------------------
@@ -47,6 +53,10 @@ uvicorn[standard]==0.32.1
 pydantic==2.10.2
 pydantic-settings==2.6.1
 python-multipart==0.0.19  # for /ingest file uploads
+# anyio (transitive via starlette) unpinned resolves 4.15+, whose deprecations
+# and stricter stream cleanup break starlette 0.41's TestClient under
+# pytest's `filterwarnings = error`. 4.6.2 is the release starlette 0.41 shipped with.
+anyio==4.6.2.post1
 
 # --- UI (Streamlit) ---------------------------------------------------------
 streamlit==1.41.1

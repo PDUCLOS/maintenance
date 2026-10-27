@@ -68,6 +68,7 @@ filterwarnings = [
     "ignore::DeprecationWarning:chromadb.*",
     "ignore::DeprecationWarning:langchain.*",
 ]
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
 branch = true
