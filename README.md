@@ -177,7 +177,31 @@ make lint              # ruff
 make format            # ruff auto-fix
 ```
 
-## Why Apple Silicon only
+## Running on Windows / Linux with an NVIDIA GPU (Ollama backend)
+
+MLX only exists on Apple Silicon, so a portable backend was added — the Mac
+path is unchanged and stays the default. Everything is selected in `.env`:
+
+```bash
+LLM_PROVIDER=ollama          # qwen3.5:9b served by Ollama (GPU)
+EMBED_PROVIDER=ollama        # same bge-m3 model, via /api/embed
+TORCH_DEVICE=auto            # cross-encoder reranker: cuda if available, else cpu
+CHROMA_MODE=persistent       # embedded Chroma on disk (data/chroma), no Docker
+```
+
+```bash
+ollama pull qwen3.5:9b && ollama pull bge-m3
+py -3.12 -m venv .venv && .venv\Scripts\pip install -r requirements-dev.txt
+.venv\Scripts\python -m src.ingestion.pipeline          # PDFs in data/raw/pdf/
+.venv\Scripts\uvicorn src.api.main:app --port 18000
+python scripts/build_gold_set.py && python scripts/llmops_bench.py   # LLMOps bench
+```
+
+Measured results, screenshots and diagrams: [`docs/index.html`](docs/index.html)
+(GitHub Pages showcase, in French) and [`docs/PORTFOLIO.md`](docs/PORTFOLIO.md).
+Kubernetes manifests: [`deploy/k8s`](deploy/k8s) (kustomize, overlays `local-gpu` and `cloud`).
+
+## Why Apple Silicon only (MLX backend)
 
 MLX is Apple's own ML framework. It uses Metal (the macOS GPU API) and the
 unified memory of Apple Silicon. There is **no CPU fallback, no other
