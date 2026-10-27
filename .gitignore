@@ -105,3 +105,4 @@ $RECYCLE.BIN/
 # Embedded Chroma store (CHROMA_MODE=persistent) and BM25 cache
 data/chroma/
 data/processed/bm25_cache.pkl
+data/promo/
