@@ -55,6 +55,7 @@ app.add_middleware(
     allow_origins=[
         f"http://localhost:{settings.ui_port}",
         f"http://127.0.0.1:{settings.ui_port}",
+        *[o.strip() for o in settings.cors_extra_origins.split(",") if o.strip()],
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -104,12 +105,28 @@ def health() -> HealthResponse:
     # We only check the host is Apple Silicon — the LLM is loaded lazily.
     mlx_ready = settings.is_apple_silicon()
     hardware = "apple_silicon" if mlx_ready else "other"
+    llm_ready = mlx_ready if settings.llm_provider == "mlx" else _ollama_has_model()
 
-    overall = "ok" if chroma_reachable and mlx_ready else "degraded"
+    overall = "ok" if chroma_reachable and llm_ready else "degraded"
     return HealthResponse(
         status=overall,
         chroma_reachable=chroma_reachable,
         collection_count=collection_count,
         mlx_ready=mlx_ready,
         hardware=hardware,
+        llm_provider=settings.llm_provider,
+        llm_ready=llm_ready,
     )
+
+
+def _ollama_has_model() -> bool:
+    """True if the Ollama server answers and serves the configured chat model."""
+    import httpx
+
+    try:
+        tags = httpx.get(f"{settings.ollama_base_url}/api/tags", timeout=2.0).json()
+    except Exception as e:
+        logger.warning("Health: Ollama unreachable: {}", e)
+        return False
+    names = {m.get("name") for m in tags.get("models", [])}
+    return settings.ollama_chat_model in names

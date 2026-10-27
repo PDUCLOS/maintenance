@@ -84,6 +84,7 @@ def query(req: QueryRequest) -> QueryResponse | JSONResponse:
         sources=[_to_source(c) for c in rag_response.sources],
         latency_ms=elapsed_ms,
         language=rag_response.language,
+        usage=getattr(rag_response, "usage", None) or {},
     )
 
 

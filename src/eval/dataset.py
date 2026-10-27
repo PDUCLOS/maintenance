@@ -768,7 +768,7 @@ def build() -> Path:
 
     Returns the path to the generated file.
     """
-    settings.assert_apple_silicon()
+    settings.assert_backend_supported()
     out_path = settings.eval_dataset_file
     out_path.parent.mkdir(parents=True, exist_ok=True)
 

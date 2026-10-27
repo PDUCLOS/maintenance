@@ -28,7 +28,7 @@ pick the right per-call prompt template.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
@@ -36,7 +36,7 @@ from langchain_core.runnables import RunnablePassthrough
 from src.config import settings
 from src.rag.embeddings import Embedder
 from src.rag.language import detect_language
-from src.rag.llm import MLXChatModel
+from src.rag.llm import get_chat_model
 from src.rag.prompts.qa_template import get_qa_template
 from src.rag.retriever import HybridRetriever
 from src.rag.types import RetrievedChunk
@@ -52,6 +52,8 @@ class RAGResponse:
     answer: str
     sources: list[RetrievedChunk]
     language: str  # "fr" or "en" — the language of the answer
+    # Token counts from the LLM backend (Ollama reports them; MLX doesn't).
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 class RAGChain:
@@ -63,7 +65,7 @@ class RAGChain:
         """`language` is the DEFAULT language used only when detection
         fails (empty/unrecognisable question). For real queries the
         actual language is auto-detected per call."""
-        self.llm = MLXChatModel()
+        self.llm = get_chat_model()
         self.embedder = Embedder()
         self.vectorstore = VectorStore()
         self.retriever = HybridRetriever(self.vectorstore, self.embedder)
@@ -117,15 +119,17 @@ class RAGChain:
         language = detect_language(question)
         chunks = self.retriever.retrieve(question, top_k=top_k)
         context = self._format_context(chunks)
-        chain = self._build_invoke(language)
-        answer = chain.invoke({"context": context, "question": question})
+        prompt = get_qa_template(language=language)
+        message = (prompt | self._llm).invoke({"context": context, "question": question})
+        answer = self._parser.invoke(message)
+        usage = dict(getattr(message, "usage_metadata", None) or {})
         logger.info(
             "RAG query ok (lang={}, chunks={}, answer_len={})",
             language,
             len(chunks),
             len(answer),
         )
-        return RAGResponse(answer=answer, sources=chunks, language=language)
+        return RAGResponse(answer=answer, sources=chunks, language=language, usage=usage)
 
     def stream(
         self,

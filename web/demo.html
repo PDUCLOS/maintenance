@@ -180,7 +180,8 @@
 <script>
 'use strict';
 
-const API = 'http://localhost:8000';
+// Override with ?api=http://host:port (e.g. when the API runs on another port).
+const API = new URLSearchParams(location.search).get('api') || 'http://localhost:8000';
 const chat = document.getElementById('chat');
 const input = document.getElementById('input');
 const send = document.getElementById('send');

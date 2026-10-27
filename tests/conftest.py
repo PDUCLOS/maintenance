@@ -18,12 +18,13 @@ from src.config import settings
 
 
 def pytest_collection_modifyitems(config, items):
-    """Auto-skip integration tests on non-Apple-Silicon or when PDFs are missing."""
+    """Auto-skip integration tests when the MLX backend can't run here
+    (LLM_PROVIDER=mlx on non-Apple-Silicon) or when PDFs are missing."""
     skip_msilicon = pytest.mark.skip(reason="Apple Silicon required (MLX)")
     skip_pdfs = pytest.mark.skip(reason="No PDFs found in data/raw/pdf/")
     for item in items:
         if "integration" in item.keywords:
-            if not settings.is_apple_silicon():
+            if settings.llm_provider == "mlx" and not settings.is_apple_silicon():
                 item.add_marker(skip_msilicon)
             if not settings.pdf_dir.is_dir() or not any(settings.pdf_dir.glob("*.pdf")):
                 item.add_marker(skip_pdfs)

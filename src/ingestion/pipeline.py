@@ -29,7 +29,7 @@ from src.utils.timing import timed
 @timed
 def run() -> None:
     """Execute the full ingestion pipeline. Raises on any error."""
-    settings.assert_apple_silicon()
+    settings.assert_backend_supported()
 
     # 1. Build the raw corpus as (text, source, metadata) tuples
     corpus: list[tuple[str, str, dict[str, str]]] = []

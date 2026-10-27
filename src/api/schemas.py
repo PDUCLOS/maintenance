@@ -29,6 +29,10 @@ class QueryResponse(BaseModel):
         default="en",
         description="Detected language of the answer (fr or en). Mirror response: same as the question.",
     )
+    usage: dict[str, int] = Field(
+        default_factory=dict,
+        description="Token counts reported by the LLM backend (input/output/total), if any.",
+    )
 
 
 class IngestRequest(BaseModel):
@@ -74,6 +78,8 @@ class HealthResponse(BaseModel):
     collection_count: int
     mlx_ready: bool
     hardware: str
+    llm_provider: str = "mlx"
+    llm_ready: bool = False
 
 
 class IndexStatsResponse(BaseModel):

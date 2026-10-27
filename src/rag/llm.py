@@ -1,4 +1,4 @@
-"""MLX LLM wrapper.
+"""LLM wrappers: MLX (Apple Silicon) and Ollama (any OS).
 
 This is the heart of the project: a thin adapter that exposes the
 configured MLX model (`settings.mlx_model_repo`, default Qwen2.5-7B —
@@ -7,8 +7,10 @@ mlx-lm. We use LangChain's
 BaseChatModel interface so the LLM drops into the existing LangChain
 ecosystem (chains, agents, RAGAS evaluation).
 
-Hardware requirement: Apple Silicon (M1/M2/M3/M4/M5). On other platforms
-the constructor raises — no silent CPU fallback, no fake responses.
+Hardware requirement for MLX: Apple Silicon (M1/M2/M3/M4/M5). On other
+platforms the MLX constructor raises — no silent CPU fallback, no fake
+responses. Set `LLM_PROVIDER=ollama` to use `OllamaChatModel` instead
+(`get_chat_model()` picks the right one).
 """
 
 from __future__ import annotations
@@ -318,4 +320,137 @@ class MLXChatModel(BaseChatModel):
         }
 
 
-__all__ = ["MLXChatModel"]
+def _role(m: BaseMessage) -> str:
+    if isinstance(m, SystemMessage):
+        return "system"
+    if isinstance(m, AIMessage):
+        return "assistant"
+    return "user"
+
+
+class OllamaChatModel(BaseChatModel):
+    """LangChain chat model backed by a local Ollama server (/api/chat).
+
+    The portable counterpart of `MLXChatModel`: same LangChain interface,
+    same sampling settings, but the GPU work happens inside Ollama (CUDA,
+    ROCm, Metal or CPU — whatever the host has). Talks plain HTTP with
+    httpx, so no extra dependency. Token counts reported by Ollama are
+    kept on the AIMessage (`usage_metadata`) for the LLMOps bench and the
+    API metrics.
+    """
+
+    model_name: str = settings.ollama_chat_model
+    base_url: str = settings.ollama_base_url
+    max_tokens: int = settings.mlx_max_tokens
+    temperature: float = settings.mlx_temperature
+    top_p: float = settings.mlx_top_p
+    num_ctx: int = settings.ollama_num_ctx
+    timeout: float = settings.ollama_timeout_seconds
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def _payload(self, messages: list[BaseMessage], stop: list[str] | None, stream: bool) -> dict:
+        options: dict[str, Any] = {
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "num_predict": self.max_tokens,
+            "num_ctx": self.num_ctx,
+        }
+        if stop:
+            options["stop"] = stop
+        return {
+            "model": self.model_name,
+            "messages": [{"role": _role(m), "content": m.content} for m in messages],
+            "stream": stream,
+            # Reasoning models (qwen3.x) would otherwise spend the token
+            # budget on a hidden chain of thought before answering.
+            "think": False,
+            "keep_alive": "10m",
+            "options": options,
+        }
+
+    @staticmethod
+    def _usage(data: dict) -> dict[str, int]:
+        prompt = int(data.get("prompt_eval_count") or 0)
+        completion = int(data.get("eval_count") or 0)
+        return {
+            "input_tokens": prompt,
+            "output_tokens": completion,
+            "total_tokens": prompt + completion,
+        }
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        import httpx
+
+        resp = httpx.post(
+            f"{self.base_url}/api/chat",
+            json=self._payload(messages, stop, stream=False),
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = _truncate_at_stop(data["message"]["content"], stop).strip()
+        message = AIMessage(content=text, usage_metadata=self._usage(data))
+        return ChatResult(
+            generations=[ChatGeneration(message=message)],
+            llm_output={"token_usage": self._usage(data), "model_name": self.model_name},
+        )
+
+    def _stream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        import json
+
+        import httpx
+
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/api/chat",
+            json=self._payload(messages, stop, stream=True),
+            timeout=self.timeout,
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                text = data.get("message", {}).get("content", "")
+                if text:
+                    yield ChatGenerationChunk(message=AIMessageChunk(content=text))
+                if data.get("done"):
+                    return
+
+    @property
+    def _llm_type(self) -> str:
+        return "ollama-chat"
+
+    @property
+    def _identifying_params(self) -> dict[str, Any]:
+        return {
+            "model_name": self.model_name,
+            "base_url": self.base_url,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+        }
+
+
+def get_chat_model() -> BaseChatModel:
+    """Return the chat model selected by `LLM_PROVIDER` (mlx | ollama)."""
+    settings.assert_backend_supported()
+    if settings.llm_provider == "ollama":
+        return OllamaChatModel()
+    return MLXChatModel()
+
+
+__all__ = ["MLXChatModel", "OllamaChatModel", "get_chat_model"]

@@ -13,6 +13,10 @@ Why not pure MLX for embeddings?
 
 If mlx is required for embeddings too, swap the body of `Embedder.embed`
 to use `mlx.core` + a HF model converted to MLX format.
+
+Portable path: with `EMBED_PROVIDER=ollama` the same bge-m3 model is
+served by Ollama (`/api/embed`, GPU on Windows/Linux) — no torch needed.
+Vectors are L2-normalised either way, so the Chroma index is the same.
 """
 
 from __future__ import annotations
@@ -36,9 +40,34 @@ class Embedder:
     _model: Any = None
     _lock: threading.Lock = threading.Lock()
 
+    # Ollama batch size: one HTTP call per batch keeps memory flat on
+    # large ingests while still amortising the request overhead.
+    _OLLAMA_BATCH = 64
+
     def __init__(self) -> None:
         self._repo = settings.mlx_embed_repo
         self._dim = settings.embed_dim
+        self._provider = settings.embed_provider
+
+    def _embed_ollama(self, texts: list[str]) -> list[list[float]]:
+        import httpx
+        import numpy as np
+
+        out: list[list[float]] = []
+        with httpx.Client(timeout=settings.ollama_timeout_seconds) as client:
+            for start in range(0, len(texts), self._OLLAMA_BATCH):
+                batch = texts[start : start + self._OLLAMA_BATCH]
+                resp = client.post(
+                    f"{settings.ollama_base_url}/api/embed",
+                    json={"model": settings.ollama_embed_model, "input": batch},
+                )
+                resp.raise_for_status()
+                vecs = np.asarray(resp.json()["embeddings"], dtype=np.float32)
+                vecs /= np.linalg.norm(vecs, axis=1, keepdims=True).clip(min=1e-12)
+                out.extend(vecs.tolist())
+                if len(texts) > 50 and (start // self._OLLAMA_BATCH) % 20 == 0:
+                    logger.info("Embedded {}/{} chunks (ollama)", start + len(batch), len(texts))
+        return out
 
     def _load(self) -> None:
         if Embedder._model is not None:
@@ -49,13 +78,17 @@ class Embedder:
             from sentence_transformers import SentenceTransformer
 
             logger.info("Loading embedding model {}", self._repo)
-            Embedder._model = SentenceTransformer(self._repo, device="mps")
+            Embedder._model = SentenceTransformer(
+                self._repo, device=settings.resolve_torch_device()
+            )
             logger.info(
                 "Embedding model ready (dim={})", self._model.get_sentence_embedding_dimension()
             )
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of texts. Returns a list of float vectors."""
+        if self._provider == "ollama":
+            return self._embed_ollama(texts) if texts else []
         self._load()
         assert Embedder._model is not None
         if not texts:

@@ -31,11 +31,19 @@ class VectorStore:
         # when it fires from a second process re-instantiating the client
         # (e.g. Streamlit re-running the whole script on every interaction)
         # it segfaults the interpreter instead of just logging the error.
-        self._client = chromadb.HttpClient(
-            host=settings.chroma_host,
-            port=settings.chroma_port,
-            settings=chromadb.config.Settings(anonymized_telemetry=False),
-        )
+        chroma_settings = chromadb.config.Settings(anonymized_telemetry=False)
+        if settings.chroma_mode == "persistent":
+            # Embedded mode (CHROMA_MODE=persistent): same collection API,
+            # stored on local disk — no Chroma server / Docker needed.
+            self._client = chromadb.PersistentClient(
+                path=str(settings.chroma_persist_dir), settings=chroma_settings
+            )
+        else:
+            self._client = chromadb.HttpClient(
+                host=settings.chroma_host,
+                port=settings.chroma_port,
+                settings=chroma_settings,
+            )
         self._collection = self._client.get_or_create_collection(
             name=settings.chroma_collection,
             metadata={"hnsw:space": "cosine"},

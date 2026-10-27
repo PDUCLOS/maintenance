@@ -22,7 +22,7 @@ from src.utils.logger import logger
 # accepts external connections) but the browser always connects
 # to localhost — binding 0.0.0.0 in the client base would resolve
 # to the wrong host on some setups.
-_BASE_URL = f"http://localhost:{settings.api_port}"
+_BASE_URL = settings.ui_api_base_url.rstrip("/") or f"http://localhost:{settings.api_port}"
 
 
 def api_get(path: str, timeout: float = 5.0) -> dict | None:

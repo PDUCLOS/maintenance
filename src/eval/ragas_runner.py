@@ -163,7 +163,7 @@ def _snapshot(metrics: list[MetricResult], n_samples: int) -> EvalSnapshot:
 @timed
 def run(dataset_path: Path, metrics: list[str]) -> EvalSnapshot:
     """Execute the RAGAS evaluation. Returns the snapshot."""
-    settings.assert_apple_silicon()
+    settings.assert_backend_supported()
     if not dataset_path.is_file():
         raise FileNotFoundError(
             f"Evaluation dataset not found: {dataset_path}. Run 'make eval-dataset' first."

@@ -52,8 +52,8 @@ class Reranker:
             from sentence_transformers import CrossEncoder
 
             logger.info("Loading cross-encoder reranker: {}", self.model_name)
-            # device='mps' is the Apple Silicon GPU path.
-            Reranker._model = CrossEncoder(self.model_name, device="mps")
+            # 'mps' on Apple Silicon (default); TORCH_DEVICE=cuda/cpu/auto elsewhere.
+            Reranker._model = CrossEncoder(self.model_name, device=settings.resolve_torch_device())
             logger.info("Reranker ready")
 
     def rerank(

@@ -38,6 +38,35 @@ class Settings(BaseSettings):
         description="Expected platform. Set to 'apple_silicon' or 'other'.",
     )
 
+    # --- Backend selection ----------------------------------------------------
+    # MLX only exists on Apple Silicon. On Windows/Linux (NVIDIA GPU) the same
+    # pipeline runs with Ollama for generation and embeddings, and with an
+    # embedded ChromaDB (no Docker). Defaults keep the original Mac setup.
+    llm_provider: str = Field(
+        default="mlx",
+        description="'mlx' (Apple Silicon) or 'ollama' (any OS, GPU via Ollama).",
+    )
+    embed_provider: str = Field(
+        default="sentence_transformers",
+        description="'sentence_transformers' (local torch) or 'ollama'.",
+    )
+    torch_device: str = Field(
+        default="mps",
+        description="Device for sentence-transformers models: 'mps', 'cuda', 'cpu' or 'auto'.",
+    )
+    chroma_mode: str = Field(
+        default="http",
+        description="'http' (Chroma server, e.g. Docker) or 'persistent' (embedded, on disk).",
+    )
+    chroma_persist_dir: Path = Field(default=PROJECT_ROOT / "data" / "chroma")
+
+    # --- LLM (Ollama) -------------------------------------------------------
+    ollama_base_url: str = Field(default="http://127.0.0.1:11434")
+    ollama_chat_model: str = Field(default="qwen3.5:9b")
+    ollama_embed_model: str = Field(default="bge-m3")
+    ollama_timeout_seconds: float = Field(default=180.0, ge=1.0)
+    ollama_num_ctx: int = Field(default=8192, ge=512)
+
     # --- LLM (MLX) ----------------------------------------------------------
     # Qwen2.5-7B-Instruct, not Mistral-7B-Instruct-v0.3: A/B tested on the
     # ReAct agent harness (5 quantitative questions, same 4-bit/7B
@@ -86,6 +115,12 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000)
     api_log_level: str = Field(default="info")
     ui_port: int = Field(default=8501)
+    # Where the Streamlit server reaches the API. Empty = http://localhost:API_PORT
+    # (single host). In Kubernetes: the API Service, e.g. http://copilot-api:8000.
+    ui_api_base_url: str = Field(default="")
+    # Extra browser origins allowed by CORS (comma-separated), e.g. the static
+    # web/demo.html page served on another port.
+    cors_extra_origins: str = Field(default="")
 
     # --- Paths --------------------------------------------------------------
     data_dir: Path = Field(default=PROJECT_ROOT / "data")
@@ -137,6 +172,36 @@ class Settings(BaseSettings):
                 "Either run on Apple Silicon hardware or replace the MLX "
                 "backend (see docs/architecture.md)."
             )
+
+    def assert_backend_supported(self) -> None:
+        """Check the configured backends can run on this host.
+
+        Only the MLX backend is tied to Apple Silicon; the Ollama backend
+        runs anywhere an Ollama server is reachable.
+        """
+        if self.llm_provider not in {"mlx", "ollama"}:
+            raise RuntimeError(f"Unknown LLM_PROVIDER={self.llm_provider!r} (mlx|ollama).")
+        if self.embed_provider not in {"sentence_transformers", "ollama"}:
+            raise RuntimeError(
+                f"Unknown EMBED_PROVIDER={self.embed_provider!r} (sentence_transformers|ollama)."
+            )
+        if self.llm_provider == "mlx":
+            self.assert_apple_silicon()
+
+    def resolve_torch_device(self) -> str:
+        """Return the torch device to use, resolving 'auto' at runtime."""
+        if self.torch_device != "auto":
+            return self.torch_device
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                return "cuda"
+            if torch.backends.mps.is_available():
+                return "mps"
+        except Exception:  # torch missing or broken: CPU is always there
+            pass
+        return "cpu"
 
     def assert_python_version(self) -> None:
         """Raise if Python < 3.12."""
