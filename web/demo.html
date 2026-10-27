@@ -47,7 +47,12 @@
             border-radius: var(--radius-full);
             border: 1px solid var(--border);
         }
-    </style>
+    .md { display: grid; gap: 2px; }
+.md .md-h { font-weight: 700; margin-top: 8px; }
+.md .md-li { padding-left: 16px; position: relative; }
+.md .md-li::before { content: "•"; position: absolute; left: 2px; opacity: .7; }
+.md .md-gap { height: 6px; }
+</style>
 </head>
 <body>
 
@@ -99,7 +104,7 @@
                 <span class="status-value" id="status-chroma">—</span>
             </div>
             <div class="status-row">
-                <span class="status-label">MLX</span>
+                <span class="status-label">LLM</span>
                 <span class="status-value" id="status-mlx">—</span>
             </div>
             <div class="status-row">
@@ -203,8 +208,8 @@ const examplesEl = document.getElementById('examples');
 // ===========================================================================
 
 const TOPICS = [
-    ['ball bearing load rating', 'Capacité de charge d\\'un roulement à billes'],
-    ['roller bearing load rating', 'Capacité de charge d\\'un roulement à rouleaux'],
+    ['ball bearing load rating', 'Capacité de charge d\'un roulement à billes'],
+    ['roller bearing load rating', 'Capacité de charge d\'un roulement à rouleaux'],
     ['fatigue life', 'Durée de vie en fatigue (L10)'],
     ['static load', 'Charge statique (C0)'],
     ['dynamic load', 'Charge dynamique (C)'],
@@ -222,14 +227,14 @@ const DOCUMENT_OPTIONS = [
     ['SKF', 'SKF'],
     ['Schaeffler INA FAG', 'Schaeffler (INA / FAG)'],
     ['NTN-SNR', 'NTN-SNR'],
-    ['any', 'N\\'importe lequel'],
+    ['any', 'N\'importe lequel'],
 ];
 
 const INTENTS = [
     {
         key: 'load_basic_dynamic', icon: '⚙️', category: 'Capacité de charge',
         label: 'Capacité de charge dynamique de base (C)',
-        description: 'Définition, mode de calcul, facteurs d\\'ajustement.',
+        description: 'Définition, mode de calcul, facteurs d\'ajustement.',
         question: 'What is the basic dynamic load rating (C) and how is it used to size a bearing?',
         fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'ball bearing load rating' }],
     },
@@ -269,7 +274,7 @@ const INTENTS = [
     },
     {
         key: 'vibration_diagnosis', icon: '📈', category: 'Diagnostic',
-        label: 'Diagnostic vibratoire d\\'un roulement',
+        label: 'Diagnostic vibratoire d\'un roulement',
         description: 'Fréquences caractéristiques, FFT, seuils de sévérité.',
         question: 'How do I diagnose a bearing defect through vibration analysis?',
         fields: [{ name: 'topic', label: 'Sujet', kind: 'select', options: TOPICS, default: 'vibration monitoring' }],
@@ -291,7 +296,7 @@ const INTENTS = [
     {
         key: 'free_question', icon: '📚', category: 'Question libre',
         label: 'Question libre sur les catalogues',
-        description: 'Pose n\\'importe quelle question sur les roulements, lubrification, montage, etc.',
+        description: 'Pose n\'importe quelle question sur les roulements, lubrification, montage, etc.',
         question: 'What does the catalogue documentation say about {topic}?',
         fields: [
             { name: 'topic', label: 'Sujet (en anglais de préférence)', kind: 'text',
@@ -300,7 +305,7 @@ const INTENTS = [
     },
     {
         key: 'out_of_scope', icon: '⚠️', category: 'Hors-scope (test)',
-        label: "Test hors-scope (doit dire 'I don\\'t know')",
+        label: "Test hors-scope (doit dire 'I don't know')",
         description: 'Vérifie que le copilot refuse poliment les questions non-pertinentes.',
         question: '{question}',
         fields: [
@@ -314,9 +319,10 @@ function renderIntentSelector() {
     const sel = document.getElementById('guided-intent');
     sel.innerHTML = '';
     let lastCategory = null;
+    let grp = null;  // current <optgroup>, shared across iterations
     INTENTS.forEach(intent => {
         if (intent.category !== lastCategory) {
-            const grp = document.createElement('optgroup');
+            grp = document.createElement('optgroup');
             grp.label = intent.category;
             sel.appendChild(grp);
             lastCategory = intent.category;
@@ -451,7 +457,9 @@ async function refreshStatus() {
         const h = await r.json();
         set('status-api', 'online', 'ok');
         set('status-chroma', h.chroma_reachable ? 'reachable' : 'down', h.chroma_reachable ? 'ok' : 'error');
-        set('status-mlx', h.mlx_ready ? 'ready' : 'not ready', h.mlx_ready ? 'ok' : 'warn');
+        // llm_provider / llm_ready come from the portable backend; older APIs only report mlx_ready.
+        const llmReady = h.llm_ready ?? h.mlx_ready;
+        set('status-mlx', `${h.llm_provider || 'mlx'} · ${llmReady ? 'ready' : 'not ready'}`, llmReady ? 'ok' : 'warn');
         set('status-hw', h.hardware || '?', '');
         set('status-chunks', h.collection_count || 0, (h.collection_count > 0) ? 'ok' : 'warn');
     } catch (e) {
@@ -489,6 +497,23 @@ function addMessage(role, content, meta) {
     chat.appendChild(wrap);
     chat.scrollTop = chat.scrollHeight;
     return body;
+}
+
+// Minimal Markdown for LLM answers: the text is HTML-escaped FIRST, then only
+// headings, **bold**, `code` and list bullets are turned into tags — the model
+// output can never inject markup into the page.
+function renderMarkdown(md) {
+    const esc = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return esc.split('\n').map(line => {
+        let l = line
+            .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>');
+        const h = l.match(/^#{1,4}\s+(.*)$/);
+        if (h) return `<div class="md-h">${h[1]}</div>`;
+        const li = l.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/);
+        if (li) return `<div class="md-li">${li[1]}</div>`;
+        return l.trim() ? `<div>${l}</div>` : '<div class="md-gap"></div>';
+    }).join('');
 }
 
 function addUserMessage(q) {
@@ -555,13 +580,15 @@ async function sendQuery() {
         assistantEl.classList.remove('streaming-cursor');
         assistantEl.innerHTML = '';
         const text = document.createElement('div');
-        text.style.whiteSpace = 'pre-wrap';
-        text.textContent = data.answer || '(empty answer)';
+        text.className = 'md';
+        text.innerHTML = renderMarkdown(data.answer || '(empty answer)');
         assistantEl.appendChild(text);
         const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
         const meta = document.createElement('div');
         meta.className = 'message-meta';
-        meta.textContent = `⏱ ${elapsed}s · ${(data.sources || []).length} sources · latence API : ${data.latency_ms || '?'}ms · langue : ${data.language || '?'}`;
+        const latency = data.latency_ms ? Math.round(data.latency_ms) : '?';
+        const tokens = data.usage && data.usage.total_tokens ? ` · ${data.usage.input_tokens} + ${data.usage.output_tokens} tokens` : '';
+        meta.textContent = `⏱ ${elapsed}s · ${(data.sources || []).length} sources · latence API : ${latency} ms${tokens} · langue : ${data.language || '?'}`;
         assistantEl.appendChild(meta);
         renderSources(data.sources || []);
     } catch (e) {
