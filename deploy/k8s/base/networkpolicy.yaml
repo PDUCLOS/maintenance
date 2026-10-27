@@ -12,3 +12,27 @@ spec:
   ingress:
     - from:
         - podSelector: {}
+---
+# L'API expose aussi /ingest et /eval (actions coûteuses, sans authentification
+# applicative) : seuls l'interface Streamlit et le scrapeur Prometheus
+# (namespace étiqueté monitoring) peuvent la joindre. L'Ingress public ne
+# route que vers l'interface.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-from-ui-and-monitoring
+spec:
+  podSelector:
+    matchLabels: { app: copilot-api }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: copilot-ui }
+      ports:
+        - { port: 8000, protocol: TCP }
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports:
+        - { port: 8000, protocol: TCP }

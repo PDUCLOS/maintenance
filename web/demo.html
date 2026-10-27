@@ -180,8 +180,18 @@
 <script>
 'use strict';
 
-// Override with ?api=http://host:port (e.g. when the API runs on another port).
-const API = new URLSearchParams(location.search).get('api') || 'http://localhost:8000';
+// Override the port with ?api=http://localhost:PORT. Only local origins are
+// accepted, so a crafted link cannot send questions to a third-party server.
+const API = (() => {
+    const raw = new URLSearchParams(location.search).get('api');
+    try {
+        const u = new URL(raw);
+        if (['localhost', '127.0.0.1'].includes(u.hostname) && ['http:', 'https:'].includes(u.protocol)) {
+            return u.origin;
+        }
+    } catch (_) { /* absent or invalid: default below */ }
+    return 'http://localhost:8000';
+})();
 const chat = document.getElementById('chat');
 const input = document.getElementById('input');
 const send = document.getElementById('send');
