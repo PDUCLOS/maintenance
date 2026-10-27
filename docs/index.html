@@ -368,7 +368,14 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
         <tr><td>Ingestion (1 734 pages → 4 498 passages)</td><td class="num">247,6 s</td><td>dont environ 2 min 23 s d'embeddings bge-m3 sur GPU</td></tr>
       </tbody>
     </table></div>
-    ⟦RAGAS⟧
+    <div class="scroll"><table>
+      <thead><tr><th>RAGAS 0.2 (jeu d'origine, 25 questions)</th><th class="num">Score</th><th>Comment c'est calculé</th></tr></thead>
+      <tbody>
+        <tr><td>Faithfulness</td><td class="num">0,736</td><td>part des affirmations de la réponse retrouvées dans les sources</td></tr>
+        <tr><td>Answer relevancy</td><td class="num">0,555</td><td>similarité entre la question et des questions régénérées depuis la réponse</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">Lancé par le test d'intégration <code>test_eval_metrics_above_threshold</code> (24 min 50 s). Le juge RAGAS est ici qwen3.5:9b, c'est-à-dire le modèle évalué lui-même, avec les embeddings bge-m3 : ces scores servent de suivi, pas de verdict. La pertinence est pénalisée par le gabarit verbeux « Contexte / Réponse / Sources » et par les 5 questions hors sujet, auxquelles la bonne réponse est « je ne sais pas ».</p>
     <div class="callout"><b>Ce que ces chiffres ne disent pas</b><span class="muted">30 questions, c'est un petit échantillon : une question vaut 3,3 points de hit@5. Les questions sont générées par un LLM, et une sur trente est mal formulée (« roulements à billes cylindriques »). Les latences ont été prises pendant que d'autres projets utilisaient la même carte graphique : elles sont pessimistes, l'embedding d'une seule question (1,6 s ici) prend normalement quelques dizaines de millisecondes. Le chemin Mac d'origine (MLX) n'a pas été ré-exécuté.</span></div>
   </div>
 </section>
@@ -383,6 +390,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
       <div class="entry fix"><span class="tag">Correctif</span><b>Installation à neuf impossible sous Windows</b><span class="muted"><code>chromadb 0.6.3</code> exige un compilateur C++ (pas de roue Windows) : version 1.0.20 épinglée pour Windows uniquement. <code>mlx</code> passe derrière un marqueur de plateforme.</span></div>
       <div class="entry fix"><span class="tag">Correctif</span><b>11 tests en échec après une installation propre</b><span class="muted">Deux dépendances indirectes non épinglées avaient bougé : <code>pyarrow</code> 26 exige NumPy 2 (le projet est en 1.26) et <code>anyio</code> 4.15 casse le client de test de Starlette. Les deux sont épinglées ; la suite repasse au vert.</span></div>
       <div class="entry fix"><span class="tag">Correctif</span><b>La page de démo web ne fonctionnait pas du tout</b><span class="muted">Sept apostrophes doublement échappées provoquaient une erreur de syntaxe au chargement, puis une variable hors de portée cassait le formulaire guidé. Corrigé ; les réponses s'affichent désormais en Markdown propre.</span></div>
+      <div class="entry fix"><span class="tag">Correctif</span><b>Les tests d'intégration faisaient planter Python</b><span class="muted">À l'import, PyMuPDF émet un avertissement ; la configuration de pytest le transforme en erreur, levée au milieu du code natif : « access violation » au lieu d'un échec lisible. Filtre ciblé ajouté ; les 9 tests d'intégration passent (dont RAGAS).</span></div>
       <div class="entry"><span class="tag">Mesure</span><b>Le jeu d'évaluation d'origine ne mesure pas la recherche</b><span class="muted">Ses questions de thème ne désignent aucune page : 0 à 5 % de « bonne page » quelle que soit la stratégie. Construction d'un jeu « page connue » de 30 questions pour comparer quatre stratégies.</span></div>
       <div class="entry"><span class="tag">Relecture</span><b>« 3 refus sur 5 » cache une bonne nouvelle</b><span class="muted">Le numéro du support SKF <i>est</i> dans le catalogue (p. 2 et 4) : la réponse, sourcée, est juste ; c'est le jeu d'origine qui se trompe. « Prédire la date exacte de la prochaine panne » reçoit un « non, impossible » argumenté. Aucune des cinq réponses n'invente quoi que ce soit.</span></div>
       <div class="entry"><span class="tag">Limite observée</span><b>Excès de prudence et réponses longues</b><span class="muted">Sur une question, la bonne page est fournie mais le modèle répond « pas mentionné » (fidélité 1). Le gabarit « Contexte / Réponse / Sources » allonge les réponses (258 tokens en moyenne, une a atteint la limite de 1 024) : c'est le premier levier de latence.</span></div>
