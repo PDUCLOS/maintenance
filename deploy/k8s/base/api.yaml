@@ -1,0 +1,92 @@
+# API FastAPI (/query, /health, /metrics Prometheus). Sans état : l'index vit
+# dans Chroma, le cache BM25 dans le volume partagé -> réplicable.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: copilot-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: copilot-api }
+  template:
+    metadata:
+      labels: { app: copilot-api }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: maintenance-copilot
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef: { name: copilot-config }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { memory: 3Gi }
+          # / ne touche à rien (vivacité) ; /health vérifie Chroma + Ollama.
+          livenessProbe:
+            httpGet: { path: /, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: hf-cache, mountPath: /cache/hf }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: copilot-data }
+        - name: hf-cache
+          persistentVolumeClaim: { claimName: hf-cache }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: copilot-api
+spec:
+  selector: { app: copilot-api }
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+# Le goulot est le GPU (Ollama), pas l'API : l'autoscaling CPU absorbe surtout
+# le reranking et la sérialisation, il ne multiplie pas le débit du LLM.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: copilot-api
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: copilot-api }
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: copilot
+spec:
+  rules:
+    - host: copilote.example.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: copilot-ui, port: { number: 8501 } }

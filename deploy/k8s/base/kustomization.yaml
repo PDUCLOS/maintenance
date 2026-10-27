@@ -1,0 +1,21 @@
+# Base commune : tout ce qui est identique entre le poste GPU local et le cloud.
+# Rendu : kubectl kustomize deploy/k8s/overlays/local-gpu
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: maintenance-copilot
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: maintenance-copilot
+resources:
+  - namespace.yaml
+  - config.yaml
+  - storage.yaml
+  - chroma.yaml
+  - ollama.yaml
+  - api.yaml
+  - ui.yaml
+  - jobs.yaml
+  - networkpolicy.yaml
+images:
+  - name: maintenance-copilot
+    newTag: "0.2.0"

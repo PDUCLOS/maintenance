@@ -1,0 +1,51 @@
+# Overlay « cloud » (ex. AKS) : registre, stockage partagé, TLS + authentification.
+#   az acr build -r <registre> -t maintenance-copilot:0.2.0 .
+#   kubectl apply -k deploy/k8s/overlays/cloud
+# Pré-requis : pool de nœuds GPU (NVIDIA device plugin), ingress-nginx,
+# cert-manager, oauth2-proxy (Entra ID) dans le namespace `auth`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: maintenance-copilot
+    newName: monregistre.azurecr.io/maintenance-copilot
+    newTag: "0.2.0"
+patches:
+  # Volumes partagés entre répliques : Azure Files (ReadWriteMany).
+  - target: { kind: PersistentVolumeClaim, name: "copilot-data|hf-cache" }
+    patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: azurefile-csi
+  - target: { kind: Deployment, name: copilot-api }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target: { kind: HorizontalPodAutoscaler, name: copilot-api }
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+  # HTTPS public + authentification : chaque requête passe par oauth2-proxy
+  # avant d'atteindre l'interface (catalogues = documentation interne).
+  - target: { kind: Ingress, name: copilot }
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          cert-manager.io/cluster-issuer: letsencrypt
+          nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.auth.svc.cluster.local/oauth2/auth"
+          nginx.ingress.kubernetes.io/auth-signin: "https://copilote.mon-domaine.fr/oauth2/start?rd=$escaped_request_uri"
+      - op: add
+        path: /spec/ingressClassName
+        value: nginx
+      - op: replace
+        path: /spec/rules/0/host
+        value: copilote.mon-domaine.fr
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts: [copilote.mon-domaine.fr]
+            secretName: copilot-tls

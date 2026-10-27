@@ -1,0 +1,48 @@
+# Interface Streamlit (chat, inventaire, RAGAS, index). Appelle l'API par son
+# Service interne (UI_API_BASE_URL), jamais directement Ollama ni Chroma.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: copilot-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: copilot-ui }
+  template:
+    metadata:
+      labels: { app: copilot-ui }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: ui
+          image: maintenance-copilot
+          command: ["streamlit", "run", "src/ui/streamlit_app.py",
+                    "--server.port", "8501", "--server.address", "0.0.0.0",
+                    "--server.headless", "true"]
+          env:
+            - { name: PYTHONPATH, value: /app }
+          envFrom:
+            - configMapRef: { name: copilot-config }
+          ports:
+            - containerPort: 8501
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /_stcore/health, port: 8501 }
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: copilot-ui
+spec:
+  selector: { app: copilot-ui }
+  ports:
+    - port: 8501
+      targetPort: 8501

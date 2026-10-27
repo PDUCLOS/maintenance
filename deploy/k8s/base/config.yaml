@@ -1,0 +1,28 @@
+# Configuration non secrète (le projet n'a aucun secret : tout est local).
+# Mêmes variables que .env.example, backend portable Ollama + Chroma serveur.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: copilot-config
+data:
+  HARDWARE_TARGET: "other"
+  LLM_PROVIDER: "ollama"
+  EMBED_PROVIDER: "ollama"
+  OLLAMA_BASE_URL: "http://ollama:11434"
+  OLLAMA_CHAT_MODEL: "qwen3.5:9b"
+  OLLAMA_EMBED_MODEL: "bge-m3"
+  CHROMA_MODE: "http"
+  CHROMA_HOST: "chroma"
+  CHROMA_PORT: "8000"
+  CHROMA_COLLECTION: "bearings_kb"
+  TORCH_DEVICE: "cpu"            # reranker MiniLM (22 M paramètres) : le CPU suffit
+  HF_HOME: "/cache/hf"           # cache du modèle de reranking (volume partagé)
+  RERANKER_ENABLED: "true"
+  RETRIEVER_TOP_K: "5"
+  QUERY_TIMEOUT_SECONDS: "120"
+  LOG_FORMAT: "json"
+  LOG_LEVEL: "INFO"
+  UI_API_BASE_URL: "http://copilot-api:8000"
+  PDF_DIR: "/data/pdf"
+  PROCESSED_DATA_DIR: "/data/processed"
+  CHUNKS_FILE: "/data/processed/chunks.jsonl"

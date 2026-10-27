@@ -11,7 +11,12 @@
 #
 # This Dockerfile is kept for:
 #   - CI environments (running the API in a Linux container for tests)
-#   - Future deployment scenarios (cloud GPU/non-MLX backends)
+#   - Linux / Kubernetes deployment with the portable backend: generation and
+#     bge-m3 embeddings served by Ollama (GPU node), Chroma in server mode
+#     (see deploy/k8s). The same image runs the API, the Streamlit UI and the
+#     ingestion Job — only the command changes.
+#
+# Build: docker build -t maintenance-copilot:0.2.0 .
 # =============================================================================
 
 # syntax=docker/dockerfile:1.7
@@ -32,7 +37,11 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
+# CPU-only torch wheel: torch is only used by the small cross-encoder reranker
+# here (the GPU work happens in Ollama). The default PyPI Linux wheel pulls
+# ~3 GB of CUDA libraries for nothing.
 RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
 # ----- Stage 2: runtime -----------------------------------------------------
@@ -45,18 +54,30 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# Portable backend by default (MLX cannot run in a Linux container).
+ENV HARDWARE_TARGET=other \
+    LLM_PROVIDER=ollama \
+    EMBED_PROVIDER=ollama \
+    TORCH_DEVICE=cpu \
+    CHROMA_MODE=http \
+    LOG_FORMAT=json
 
 # Copy application code
 COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY data/eval/ ./data/eval/
 COPY pyproject.toml ./
 
-# Non-root user for runtime safety
-RUN useradd --create-home --shell /bin/bash app \
+# Non-root user for runtime safety (uid 1000, matches runAsUser in deploy/k8s)
+RUN useradd --create-home --uid 1000 --shell /bin/bash app \
     && chown -R app:app /app
 USER app
 
-EXPOSE 8000
+EXPOSE 8000 8501
 
-# Default to the API. Override with `docker run ... uvicorn src.ui.streamlit_app:app`
-# for the UI if you really want to (Streamlit is better run on the host).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')" || exit 1
+
+# Default to the API. UI: `streamlit run src/ui/streamlit_app.py --server.port 8501`
+# (with PYTHONPATH=/app). Ingestion: `python -m src.ingestion.pipeline`.
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

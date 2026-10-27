@@ -1,0 +1,46 @@
+# Overlay « poste GPU local » : cluster mono-nœud (Docker Desktop, k3s,
+# minikube) sur une machine avec carte NVIDIA, image construite localement.
+#   docker build -t maintenance-copilot:0.2.0 .
+#   kubectl apply -k deploy/k8s/overlays/local-gpu
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  # Un seul nœud : une réplique d'API, volumes RWO.
+  - target: { kind: Deployment, name: copilot-api }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target: { kind: Deployment, name: copilot-ui }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target: { kind: HorizontalPodAutoscaler, name: copilot-api }
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  - target: { kind: PersistentVolumeClaim, name: "copilot-data|hf-cache" }
+    patch: |-
+      - op: replace
+        path: /spec/accessModes
+        value: ["ReadWriteOnce"]
+  # Docker Desktop n'étiquette pas les nœuds GPU : on retire le nodeSelector.
+  - target: { kind: Deployment, name: ollama }
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/nodeSelector
+  - target: { kind: Ingress, name: copilot }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: copilote.localhost

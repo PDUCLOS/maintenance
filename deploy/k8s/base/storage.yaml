@@ -1,0 +1,31 @@
+# Catalogues PDF + artefacts d'ingestion (chunks.jsonl, cache BM25).
+# Les PDF ne sont pas dans l'image (licence fabricant) : on les copie dans ce
+# volume une fois (kubectl cp), puis le Job d'ingestion construit l'index.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: copilot-data
+spec:
+  accessModes: ["ReadWriteMany"]   # partagé par les répliques d'API et le Job
+  resources:
+    requests: { storage: 2Gi }
+---
+# Cache Hugging Face du cross-encoder (évite un téléchargement par pod).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hf-cache
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests: { storage: 1Gi }
+---
+# Poids des modèles Ollama (qwen3.5:9b + bge-m3).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests: { storage: 20Gi }

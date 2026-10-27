@@ -1,0 +1,48 @@
+# Jobs ponctuels : 1) télécharger les modèles dans Ollama, 2) ingérer les PDF.
+# Les PDF sont copiés une fois dans le volume copilot-data (/data/pdf), puis :
+#   kubectl -n maintenance-copilot create job ingest-manuel --from=job/ingest
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pull-models
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: pull
+          image: ollama/ollama:0.40.3
+          env:
+            - { name: OLLAMA_HOST, value: "http://ollama:11434" }
+          command: ["sh", "-c", "ollama pull qwen3.5:9b && ollama pull bge-m3"]
+---
+# PDF -> pages -> chunks -> embeddings bge-m3 (Ollama) -> Chroma.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ingest
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: ingest
+          image: maintenance-copilot
+          command: ["python", "-m", "src.ingestion.pipeline"]
+          envFrom:
+            - configMapRef: { name: copilot-config }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { memory: 4Gi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: copilot-data }
