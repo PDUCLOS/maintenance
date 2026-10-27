@@ -67,6 +67,10 @@ filterwarnings = [
     "error",
     "ignore::DeprecationWarning:chromadb.*",
     "ignore::DeprecationWarning:langchain.*",
+    # PyMuPDF's SWIG bindings warn at import; turned into an error, the
+    # exception is raised inside native module init and the interpreter
+    # segfaults (Windows access violation) instead of failing the test.
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
 ]
 asyncio_default_fixture_loop_scope = "function"
 

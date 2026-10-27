@@ -118,6 +118,7 @@ def test_pdf_loader_loads_first_available_pdf():
         pytest.skip(f"No PDFs in {settings.pdf_dir}")
     pages = load_pdf(pdfs[0])
     assert len(pages) >= 1
-    # First page should have non-trivial text
-    assert len(pages[0].text) > 200
+    # The cover page is often just a title (SKF 100-700: 104 chars), so look
+    # for non-trivial text within the first pages rather than on page 1 only.
+    assert any(len(p.text) > 200 for p in pages[:5])
     assert pages[0].page_number == 1
